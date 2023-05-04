@@ -19,7 +19,7 @@ pub fn read_serial(mut port : Box<dyn SerialPort>) -> Option<u8>
 
 pub fn main() -> Result<(), String> {
 
-
+    println!("Start");
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
 
@@ -40,11 +40,8 @@ pub fn main() -> Result<(), String> {
     'running: loop {
         for event in event_pump.poll_iter() {
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => break 'running,
+                Event::Quit { .. } => break 'running,
+                Event::KeyDown { keycode, ..} => println!("Pressed a key: {}", keycode.unwrap()),
                 _ => {}
             }
         }
@@ -53,28 +50,32 @@ pub fn main() -> Result<(), String> {
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
         // The rest of the game loop goes here...
-        // Serial
-        let port = serialport::new("/dev/ttyUSB0", 1152_000)
-        .timeout(Duration::from_millis(10))
-        .open().expect("Failed to open port");
-  
-        // let ports = serialport::available_ports().expect("No ports found!");
-        // for p in ports {
-        //     println!("{}", p.port_name);
-        // }
-
-        //println!("Read from serial.");
-        match read_serial(port)
+        if false
         {
-            Some(n) => match n
+            // Serial
+            let port = serialport::new("/dev/ttyUSB0", 1152_000)
+            .timeout(Duration::from_millis(10))
+            .open().expect("Failed to open port");
+    
+            // let ports = serialport::available_ports().expect("No ports found!");
+            // for p in ports {
+            //     println!("{}", p.port_name);
+            // }
+    
+            //println!("Read from serial.");
+            match read_serial(port)
             {
-                n if n >= 0x20 && n != 0x7F => println!("{}", n as char),
-                0x08 => println!("Cursor Left"),
-                _n => println!("Unknown Command {:#02x} received!", n),
+                Some(n) => match n
+                {
+                    n if n >= 0x20 && n != 0x7F => println!("{}", n as char),
+                    0x08 => println!("Cursor Left"),
+                    _n => println!("Unknown Command {:#02x} received!", n),
+                }
+                None => (),
             }
-            None => (),
         }
     }
+    println!("Quit");
 
     Ok(())
 }
