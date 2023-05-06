@@ -1,10 +1,12 @@
 extern crate sdl2;
 
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
+use sdl2::keyboard::{Keycode, Mod};
 use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::{Point, Rect, self};
+use sdl2::render::Canvas;
 use sdl2::sys::{self, SDL_Point};
+use sdl2::video::Window;
 use serialport::SerialPort;
 use std::time::Duration;
 
@@ -40,22 +42,97 @@ pub fn get_points(bytes : Vec<u8>) -> Vec<Point>
     points
 }
 
+pub fn render_char(canvas : &mut Canvas<Window>, ascii : u8, x : u16, y : u16)
+{
+    if ascii >= 32 && ascii <= 224
+    {
+        let shifted_ascii = ascii - 32;
+        if shifted_ascii < (FONT_BYTES.len() / 8) as u8
+        {
+            let start = 8*shifted_ascii as usize;
+            let end = start+8 as usize;
+            let points = 		get_points(FONT_BYTES[start..end].to_vec());
+            canvas.set_draw_color(Color::RGB(255, 255, 255));
+            canvas.set_viewport(Rect::new(x as i32,y as i32, 8, 8));
+            canvas.draw_points(&points[..]);
+        }
+    }
+}
+
+struct Cursor {
+    position_x: u16,
+    position_y: u16,
+    screen_width: u16,
+    screen_height: u16,
+    font_width: u16,
+    font_height: u16
+}
+
+impl Cursor {
+    fn new(screen_width: u16, screen_height: u16, font_width: u16, font_height: u16) -> Cursor {
+        Cursor {
+            position_x: 0,
+            position_y: 0,
+            screen_width: screen_width,
+            screen_height: screen_height,
+            font_width: font_width,
+            font_height: font_height
+        }
+    }
+
+    fn home(&mut self) {
+        self.position_x = 0;
+    }
+
+    fn down(&mut self) {
+        self.position_y += self.font_height;
+    }
+
+    fn up(&mut self) {
+        self.position_y -= self.font_height;
+        if self.position_y < 0 {
+          self.position_y = 0;
+        }
+    }
+
+    fn left(&mut self) {
+        self.position_x -= self.font_width;
+        if self.position_x < 0 {
+            self.position_x = 0;
+        }
+    }
+
+    fn right(&mut self) {
+        self.position_x += self.font_width;
+        if self.position_x >= self.screen_width {
+          self.home();
+          self.down();
+        }
+    }
+}
 pub fn main() -> Result<(), String> {
+
+    let screen_width = 512;
+    let screen_height = 384;
+    let font_width = 8;
+    let font_height = 8;
+    let scale = 2;
+
     println!("Start");
+    let mut cursor = Cursor::new(screen_width, screen_height, font_width, font_height);
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
 
     let window = video_subsystem
-        .window("agon-vdp-sdl", 800, 600)
+        .window("agon-vdp-sdl", 512*scale, 384*scale)
         .position_centered()
         .opengl()
         .build()
         .map_err(|e| e.to_string())?;
 
     let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
-    let mut char_x = 0;
-    let mut char_y = 0;
-
+ 
+    canvas.set_scale(scale as f32, scale as f32);
     canvas.set_draw_color(Color::RGB(0, 0, 0));
     canvas.clear();
     canvas.present();
@@ -65,24 +142,30 @@ pub fn main() -> Result<(), String> {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'running,
-                Event::KeyDown { keycode, ..} => 
+                Event::KeyDown { keycode, keymod,..} => 
                 {
-                    let mut ascii = keycode.unwrap() as usize;
-                    ascii = ascii - 32;
-                    if ascii < FONT_BYTES.len()
-                    {
-                        println!("Pressed keycode:{}", ascii);
-                        let points = 		get_points(FONT_BYTES[8*ascii..8*ascii+8].to_vec());
-                        canvas.set_draw_color(Color::RGB(255, 255, 255));
-                        canvas.set_viewport(Rect::new(char_x * 8,char_y * 8, 8, 8));
-                        canvas.draw_points(&points[..]);
-                        char_x = char_x + 1;
-                        if char_x > 80
+                    match keycode {
+                        Some(keycode) =>
                         {
-                            char_x = 0;
-                            char_y = char_y + 1;
-                        }
+                            let mut ascii = keycode as u8;
+                            if ascii < 128
+                            {
+                                println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
+                                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD)
+                                {
+                                    ascii = ascii - 32;
+                                }
+                                render_char(&mut canvas, ascii.try_into().unwrap(), cursor.position_x, cursor.position_y);
+                                cursor.right();
+                            }
+                            else
+                            {
+                                println!("Ignored key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
+                            }
+                        },
+                        None => println!("Invalid key pressed."),
                     }
+
                 },
                 _ => {}
             }
