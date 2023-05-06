@@ -117,6 +117,7 @@ pub fn main() -> Result<(), String> {
     let font_width = 8;
     let font_height = 8;
     let scale = 2;
+    let serial_active = true;
 
     println!("Start");
     let mut cursor = Cursor::new(screen_width, screen_height, font_width, font_height);
@@ -180,10 +181,10 @@ pub fn main() -> Result<(), String> {
         canvas.present();
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
         // The rest of the game loop goes here...
-        if false
+        if serial_active
         {
             // Serial
-            let port = serialport::new("/dev/ttyUSB0", 1152_000)
+            let port = serialport::new("/dev/ttyUSB0", 115200)
             .timeout(Duration::from_millis(10))
             .open().expect("Failed to open port");
     
@@ -197,9 +198,37 @@ pub fn main() -> Result<(), String> {
             {
                 Some(n) => match n
                 {
-                    n if n >= 0x20 && n != 0x7F => println!("{}", n as char),
-                    0x08 => println!("Cursor Left"),
-                    _n => println!("Unknown Command {:#02x} received!", n),
+                    n if n >= 0x20 && n != 0x7F => {
+                        println!("Received character: {}", n as char);
+                        render_char(&mut canvas, n, cursor.position_x, cursor.position_y);
+                        cursor.right();  
+                    },
+                    0x08 => {println!("Cursor left."); cursor.left();},
+                    0x09 => {println!("Cursor right."); cursor.right();},
+                    0x0A => {println!("Cursor down."); cursor.down();},
+                    0x0B => {println!("Cursor up."); cursor.up();},
+                    0x0C => {
+                        println!("CLS.");
+                        canvas.set_draw_color(Color::RGB(0, 0, 0));
+                        canvas.clear();
+                        cursor.position_x = 0;
+                        cursor.position_y = 0;
+                    },
+                    0x0D => {println!("Cursor home."); cursor.home();},
+                    0x0E => {println!("PageMode ON?");},
+                    0x0F => {println!("PageMode OFF?");},
+                    0x10 => {println!("CLG?");},
+                    0x11 => {println!("COLOUR?");},
+                    0x12 => {println!("GCOL?");},
+                    0x13 => {println!("Define Logical Colour?");},
+                    0x16 => {println!("MODE?");},
+                    0x17 => {println!("VDU23?");},
+                    0x19 => {println!("PLOT?");},
+                    0x1D => {println!("VDU_29?");},
+                    0x1E => {println!("Home."); cursor.home();},
+                    0x1F => {println!("TAB?");},
+                    0x7F => {println!("BACKSPACE?");},
+                    _n => println!("Unknown Command {:#02X?} received!", n),
                 }
                 None => (),
             }
