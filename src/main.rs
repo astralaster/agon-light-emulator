@@ -44,7 +44,7 @@ pub fn get_points(bytes : Vec<u8>) -> Vec<Point>
 
 pub fn render_char(canvas : &mut Canvas<Window>, ascii : u8, x : u16, y : u16)
 {
-    if ascii >= 32 && ascii <= 224
+    if ascii >= 32
     {
         let shifted_ascii = ascii - 32;
         if shifted_ascii < (FONT_BYTES.len() / 8) as u8
@@ -142,18 +142,23 @@ pub fn main() -> Result<(), String> {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'running,
-                Event::KeyDown { keycode, keymod,..} => 
+                Event::KeyDown { keycode, keymod, ..} => 
                 {
                     match keycode {
                         Some(keycode) =>
                         {
                             let mut ascii = keycode as u8;
-                            if ascii < 128
+                            if ascii < 127 && ascii >= 32
                             {
                                 println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
-                                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD)
+                                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
                                 {
-                                    ascii = ascii - 32;
+                                    if ascii < 65 {
+                                        ascii -= 16;
+                                    }
+                                    else {
+                                        ascii -= 32;
+                                    }
                                 }
                                 render_char(&mut canvas, ascii.try_into().unwrap(), cursor.position_x, cursor.position_y);
                                 cursor.right();
