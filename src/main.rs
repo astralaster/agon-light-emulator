@@ -13,7 +13,7 @@ use std::time::Duration;
 mod font;
 use font::font::FONT_BYTES;
 
-pub fn read_serial(mut port : Box<dyn SerialPort>) -> Option<u8>
+pub fn read_serial(port : &mut Box<dyn SerialPort>) -> Option<u8>
 {
     let mut serial_buf: Vec<u8> = vec![0; 1];
     let mut read_bytes = 0;
@@ -57,6 +57,13 @@ pub fn render_char(canvas : &mut Canvas<Window>, ascii : u8, x : u16, y : u16)
             canvas.draw_points(&points[..]);
         }
     }
+}
+
+fn cls(canvas : &mut Canvas<Window>, cursor : &mut Cursor) {
+    canvas.set_draw_color(Color::RGB(0, 0, 0));
+    canvas.clear();
+    cursor.position_x = 0;
+    cursor.position_y = 0;
 }
 
 struct Cursor {
@@ -118,8 +125,13 @@ pub fn main() -> Result<(), String> {
     let font_height = 8;
     let scale = 2;
     let serial_active = true;
+    let mut esp_boot_output = true;
 
     println!("Start");
+    let mut port = serialport::new("/dev/ttyUSB0", 115200)
+    .timeout(Duration::from_millis(10))
+    .open().expect("Failed to open port");
+
     let mut cursor = Cursor::new(screen_width, screen_height, font_width, font_height);
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
@@ -179,14 +191,12 @@ pub fn main() -> Result<(), String> {
 
         //canvas.clear();
         canvas.present();
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 100));
         // The rest of the game loop goes here...
         if serial_active
         {
             // Serial
-            let port = serialport::new("/dev/ttyUSB0", 115200)
-            .timeout(Duration::from_millis(10))
-            .open().expect("Failed to open port");
+
     
             // let ports = serialport::available_ports().expect("No ports found!");
             // for p in ports {
@@ -194,7 +204,7 @@ pub fn main() -> Result<(), String> {
             // }
     
             //println!("Read from serial.");
-            match read_serial(port)
+            match read_serial(&mut port)
             {
                 Some(n) => match n
                 {
@@ -209,10 +219,7 @@ pub fn main() -> Result<(), String> {
                     0x0B => {println!("Cursor up."); cursor.up();},
                     0x0C => {
                         println!("CLS.");
-                        canvas.set_draw_color(Color::RGB(0, 0, 0));
-                        canvas.clear();
-                        cursor.position_x = 0;
-                        cursor.position_y = 0;
+                        cls(&mut canvas, &mut cursor);
                     },
                     0x0D => {println!("Cursor home."); cursor.home();},
                     0x0E => {println!("PageMode ON?");},
@@ -222,7 +229,36 @@ pub fn main() -> Result<(), String> {
                     0x12 => {println!("GCOL?");},
                     0x13 => {println!("Define Logical Colour?");},
                     0x16 => {println!("MODE?");},
-                    0x17 => {println!("VDU23?");},
+                    0x17 => {
+                        println!("VDU23.");
+                        if esp_boot_output {
+                            println!("ESP output ends here. Now CLS.");
+                            cls(&mut canvas, &mut cursor);
+                            esp_boot_output = false;
+                        }
+                        else {
+                            match read_serial(&mut port) {
+                                Some(n) => match n {
+                                    0x00 => {
+                                        println!("Video System Control.");
+                                        match read_serial(&mut port) {
+                                            Some(n) => match n {
+                                                0x80 => println!("VDP_GP"),
+                                                0x81 => println!("VDP_KEYCODE"),
+                                                _ => println!("Unknown VSC command: {:#02X?}.", n),
+                                            },
+                                            None => (),
+                                        }
+                                    },
+                                    0x01 => println!("Cursor Control?"),
+                                    0x07 => println!("Scroll?"),
+                                    0x1B => println!("Sprite Control?"),
+                                    _ => println!("Unknown VDU command: {:#02X?}.", n),
+                                },
+                                None => (),
+                            }
+                        }
+                    },
                     0x19 => {println!("PLOT?");},
                     0x1D => {println!("VDU_29?");},
                     0x1E => {println!("Home."); cursor.home();},
