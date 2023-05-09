@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 serialport = "4.2.0"
 sdl2 = "0.35"
+iz80 = { path = "ez80" }

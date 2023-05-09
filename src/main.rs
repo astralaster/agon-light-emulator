@@ -8,10 +8,83 @@ use sdl2::render::Canvas;
 use sdl2::sys::{self, SDL_Point};
 use sdl2::video::Window;
 use serialport::SerialPort;
+use std::thread;
 use std::time::Duration;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
 
 mod font;
 use font::font::FONT_BYTES;
+
+use iz80::*;
+use std::io::Write;
+
+const ROM_SIZE: usize = 0x40000; // 256 KiB
+const RAM_SIZE: usize = 0x80000; // 512 KiB
+const MEM_SIZE: usize = ROM_SIZE + RAM_SIZE;
+
+
+
+
+
+pub struct AgonMachine {
+    mem: [u8; MEM_SIZE],
+    io: [u8; 65536],
+    tx: Sender<u8>,
+    rx: Receiver<u8>
+}
+
+impl AgonMachine {
+    /// Returns a new AgonMachine instance
+    pub fn new(tx : Sender<u8>, rx : Receiver<u8>) -> AgonMachine {
+        AgonMachine {
+            mem: [0; MEM_SIZE],
+            io: [0; 65536],
+            tx: tx,
+            rx: rx
+        }
+    }
+}
+
+// impl Default for AgonMachine {
+//     fn default() -> Self {
+//         Self::new()
+//     }
+// }
+
+impl Machine for AgonMachine {
+    fn peek(&self, address: u32) -> u8 {
+        self.mem[address as usize]
+    }
+    fn poke(&mut self, address: u32, value: u8) {
+        self.mem[address as usize] = value;
+    }
+
+    fn port_in(&mut self, address: u16) -> u8 {
+        //println!("IN({:02X}) = 0", address);
+        if address == 0xa2 {
+            0x0 // UART0 clear to send
+        } else if address == 0xc5 {
+            0x40
+            // UART_LSR_ETX		EQU 	%40
+        } else if address == 0x81 /* timer0 low byte */ {
+            0x0
+        } else if address == 0x82 /* timer0 high byte */ {
+            0x0
+        } else {
+            self.io[address as usize]
+        }
+    }
+    fn port_out(&mut self, address: u16, value: u8) {
+        if address == 0xc0 /* UART0_REG_THR */ {
+            /* Echo data from VDP to stdout */
+            self.tx.send(value);
+            //print!("{}", char::from_u32(value as u32).unwrap());
+            //std::io::stdout().flush().unwrap();
+        }
+        self.io[address as usize] = value;
+    }
+}
 
 pub fn read_serial(port : &mut Box<dyn SerialPort>) -> Option<u8>
 {
@@ -124,13 +197,44 @@ pub fn main() -> Result<(), String> {
     let font_width = 8;
     let font_height = 8;
     let scale = 2;
-    let serial_active = true;
+    let serial_active = false;
     let mut esp_boot_output = true;
 
+    let (tx_VDP2EZ80, rx_VDP2EZ80): (Sender<u8>, Receiver<u8>) = mpsc::channel();
+    let (tx_EZ802VDP, rx_EZ802VDP): (Sender<u8>, Receiver<u8>) = mpsc::channel();
+
     println!("Start");
-    let mut port = serialport::new("/dev/ttyUSB0", 115200)
-    .timeout(Duration::from_millis(10))
-    .open().expect("Failed to open port");
+
+    let cpu_thread = thread::spawn(move || {
+        // Prepare the device
+        let mut machine = AgonMachine::new(tx_EZ802VDP, rx_VDP2EZ80);
+        let mut cpu = Cpu::new_ez80();
+        //cpu.set_trace(true);
+
+        // Load program inline or from a file with:
+        let code = match std::fs::read("MOS.bin") {
+            Ok(data) => data,
+            Err(e) => {
+                println!("Error opening MOS.bin: {:?}", e);
+                std::process::exit(-1);
+            }
+        };
+
+        for (i, e) in code.iter().enumerate() {
+            machine.poke(i as u32, *e);
+        }
+
+        // Run emulation
+        cpu.state.set_pc(0x0000);
+
+        loop {
+            cpu.execute_instruction(&mut machine);
+        }
+    });
+
+    // let mut port = serialport::new("/dev/ttyUSB0", 115200)
+    //     .timeout(Duration::from_millis(10))
+    //     .open().expect("Failed to open serial port.");
 
     let mut cursor = Cursor::new(screen_width, screen_height, font_width, font_height);
     let sdl_context = sdl2::init()?;
@@ -195,78 +299,134 @@ pub fn main() -> Result<(), String> {
         // The rest of the game loop goes here...
         if serial_active
         {
-            // Serial
+            // // Serial
 
     
-            // let ports = serialport::available_ports().expect("No ports found!");
-            // for p in ports {
-            //     println!("{}", p.port_name);
-            // }
+            // // let ports = serialport::available_ports().expect("No ports found!");
+            // // for p in ports {
+            // //     println!("{}", p.port_name);
+            // // }
     
-            //println!("Read from serial.");
-            match read_serial(&mut port)
-            {
-                Some(n) => match n
-                {
-                    n if n >= 0x20 && n != 0x7F => {
-                        println!("Received character: {}", n as char);
-                        render_char(&mut canvas, n, cursor.position_x, cursor.position_y);
-                        cursor.right();  
-                    },
-                    0x08 => {println!("Cursor left."); cursor.left();},
-                    0x09 => {println!("Cursor right."); cursor.right();},
-                    0x0A => {println!("Cursor down."); cursor.down();},
-                    0x0B => {println!("Cursor up."); cursor.up();},
-                    0x0C => {
-                        println!("CLS.");
+            // //println!("Read from serial.");
+            // match read_serial(&mut port)
+            // {
+            //     Some(n) => match n
+            //     {
+            //         n if n >= 0x20 && n != 0x7F => {
+            //             println!("Received character: {}", n as char);
+            //             render_char(&mut canvas, n, cursor.position_x, cursor.position_y);
+            //             cursor.right();  
+            //         },
+            //         0x08 => {println!("Cursor left."); cursor.left();},
+            //         0x09 => {println!("Cursor right."); cursor.right();},
+            //         0x0A => {println!("Cursor down."); cursor.down();},
+            //         0x0B => {println!("Cursor up."); cursor.up();},
+            //         0x0C => {
+            //             println!("CLS.");
+            //             cls(&mut canvas, &mut cursor);
+            //         },
+            //         0x0D => {println!("Cursor home."); cursor.home();},
+            //         0x0E => {println!("PageMode ON?");},
+            //         0x0F => {println!("PageMode OFF?");},
+            //         0x10 => {println!("CLG?");},
+            //         0x11 => {println!("COLOUR?");},
+            //         0x12 => {println!("GCOL?");},
+            //         0x13 => {println!("Define Logical Colour?");},
+            //         0x16 => {println!("MODE?");},
+            //         0x17 => {
+            //             println!("VDU23.");
+            //             if esp_boot_output {
+            //                 println!("ESP output ends here. Now CLS.");
+            //                 cls(&mut canvas, &mut cursor);
+            //                 esp_boot_output = false;
+            //             }
+            //             else {
+            //                 match read_serial(&mut port) {
+            //                     Some(n) => match n {
+            //                         0x00 => {
+            //                             println!("Video System Control.");
+            //                             match read_serial(&mut port) {
+            //                                 Some(n) => match n {
+            //                                     0x80 => println!("VDP_GP"),
+            //                                     0x81 => println!("VDP_KEYCODE"),
+            //                                     _ => println!("Unknown VSC command: {:#02X?}.", n),
+            //                                 },
+            //                                 None => (),
+            //                             }
+            //                         },
+            //                         0x01 => println!("Cursor Control?"),
+            //                         0x07 => println!("Scroll?"),
+            //                         0x1B => println!("Sprite Control?"),
+            //                         _ => println!("Unknown VDU command: {:#02X?}.", n),
+            //                     },
+            //                     None => (),
+            //                 }
+            //             }
+            //         },
+            //         0x19 => {println!("PLOT?");},
+            //         0x1D => {println!("VDU_29?");},
+            //         0x1E => {println!("Home."); cursor.home();},
+            //         0x1F => {println!("TAB?");},
+            //         0x7F => {println!("BACKSPACE?");},
+            //         _n => println!("Unknown Command {:#02X?} received!", n),
+            //     }
+            //     None => (),
+            // }
+        }
+        else {
+
+            match rx_EZ802VDP.recv().unwrap() {
+                n if n >= 0x20 && n != 0x7F => {
+                    println!("Received character: {}", n as char);
+                    render_char(&mut canvas, n, cursor.position_x, cursor.position_y);
+                    cursor.right();  
+                },
+                0x08 => {println!("Cursor left."); cursor.left();},
+                0x09 => {println!("Cursor right."); cursor.right();},
+                0x0A => {println!("Cursor down."); cursor.down();},
+                0x0B => {println!("Cursor up."); cursor.up();},
+                0x0C => {
+                    println!("CLS.");
+                    cls(&mut canvas, &mut cursor);
+                },
+                0x0D => {println!("Cursor home."); cursor.home();},
+                0x0E => {println!("PageMode ON?");},
+                0x0F => {println!("PageMode OFF?");},
+                0x10 => {println!("CLG?");},
+                0x11 => {println!("COLOUR?");},
+                0x12 => {println!("GCOL?");},
+                0x13 => {println!("Define Logical Colour?");},
+                0x16 => {println!("MODE?");},
+                0x17 => {
+                    println!("VDU23.");
+                    if esp_boot_output {
+                        println!("ESP output ends here. Now CLS.");
                         cls(&mut canvas, &mut cursor);
-                    },
-                    0x0D => {println!("Cursor home."); cursor.home();},
-                    0x0E => {println!("PageMode ON?");},
-                    0x0F => {println!("PageMode OFF?");},
-                    0x10 => {println!("CLG?");},
-                    0x11 => {println!("COLOUR?");},
-                    0x12 => {println!("GCOL?");},
-                    0x13 => {println!("Define Logical Colour?");},
-                    0x16 => {println!("MODE?");},
-                    0x17 => {
-                        println!("VDU23.");
-                        if esp_boot_output {
-                            println!("ESP output ends here. Now CLS.");
-                            cls(&mut canvas, &mut cursor);
-                            esp_boot_output = false;
+                        esp_boot_output = false;
+                    }
+                    else {
+                        match rx_EZ802VDP.recv().unwrap() {
+                            0x00 => {
+                                println!("Video System Control.");
+                                match rx_EZ802VDP.recv().unwrap() {
+                                    0x80 => println!("VDP_GP"),
+                                    0x81 => println!("VDP_KEYCODE"),
+                                    n => println!("Unknown VSC command: {:#02X?}.", n),
+                                }
+                            },
+                            0x01 => println!("Cursor Control?"),
+                            0x07 => println!("Scroll?"),
+                            0x1B => println!("Sprite Control?"),
+                            n => println!("Unknown VDU command: {:#02X?}.", n),
                         }
-                        else {
-                            match read_serial(&mut port) {
-                                Some(n) => match n {
-                                    0x00 => {
-                                        println!("Video System Control.");
-                                        match read_serial(&mut port) {
-                                            Some(n) => match n {
-                                                0x80 => println!("VDP_GP"),
-                                                0x81 => println!("VDP_KEYCODE"),
-                                                _ => println!("Unknown VSC command: {:#02X?}.", n),
-                                            },
-                                            None => (),
-                                        }
-                                    },
-                                    0x01 => println!("Cursor Control?"),
-                                    0x07 => println!("Scroll?"),
-                                    0x1B => println!("Sprite Control?"),
-                                    _ => println!("Unknown VDU command: {:#02X?}.", n),
-                                },
-                                None => (),
-                            }
-                        }
-                    },
-                    0x19 => {println!("PLOT?");},
-                    0x1D => {println!("VDU_29?");},
-                    0x1E => {println!("Home."); cursor.home();},
-                    0x1F => {println!("TAB?");},
-                    0x7F => {println!("BACKSPACE?");},
-                    _n => println!("Unknown Command {:#02X?} received!", n),
-                }
-                None => (),
+                    }
+                },
+                0x19 => {println!("PLOT?");},
+                0x1D => {println!("VDU_29?");},
+                0x1E => {println!("Home."); cursor.home();},
+                0x1F => {println!("TAB?");},
+                0x7F => {println!("BACKSPACE?");},
+                n => println!("Unknown Command {:#02X?} received!", n),
             }
         }
     }
