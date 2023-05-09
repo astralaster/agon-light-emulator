@@ -1,5 +1,5 @@
 [package]
-name = "agon-vdp-sdl"
+name = "agon-light-emulator"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 serialport = "4.2.0"
 sdl2 = "0.35"
-iz80 = { path = "ez80" }
+iz80 = { git = "https://github.com/tomm/ez80.git", rev = "945fa20d9dfa4ebbe198717b73cf0901db663d22"}
