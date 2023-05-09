@@ -120,51 +120,56 @@ impl VDP {
     }
 
     pub fn run(&mut self) {
-        match self.rx.recv().unwrap() {
-            n if n >= 0x20 && n != 0x7F => {
-                println!("Received character: {}", n as char);
-                self.render_char(n);
-                self.cursor.right();  
-            },
-            0x08 => {println!("Cursor left."); self.cursor.left();},
-            0x09 => {println!("Cursor right."); self.cursor.right();},
-            0x0A => {println!("Cursor down."); self.cursor.down();},
-            0x0B => {println!("Cursor up."); self.cursor.up();},
-            0x0C => {
-                println!("CLS.");
-                self.cls();
-            },
-            0x0D => {println!("Cursor home."); self.cursor.home();},
-            0x0E => {println!("PageMode ON?");},
-            0x0F => {println!("PageMode OFF?");},
-            0x10 => {println!("CLG?");},
-            0x11 => {println!("COLOUR?");},
-            0x12 => {println!("GCOL?");},
-            0x13 => {println!("Define Logical Colour?");},
-            0x16 => {println!("MODE?");},
-            0x17 => {
-                println!("VDU23.");
-                match self.rx.recv().unwrap() {
-                    0x00 => {
-                        println!("Video System Control.");
+        match self.rx.try_recv() {
+            Ok(n) => {
+                match n {
+                    n if n >= 0x20 && n != 0x7F => {
+                        println!("Received character: {}", n as char);
+                        self.render_char(n);
+                        self.cursor.right();  
+                    },
+                    0x08 => {println!("Cursor left."); self.cursor.left();},
+                    0x09 => {println!("Cursor right."); self.cursor.right();},
+                    0x0A => {println!("Cursor down."); self.cursor.down();},
+                    0x0B => {println!("Cursor up."); self.cursor.up();},
+                    0x0C => {
+                        println!("CLS.");
+                        self.cls();
+                    },
+                    0x0D => {println!("Cursor home."); self.cursor.home();},
+                    0x0E => {println!("PageMode ON?");},
+                    0x0F => {println!("PageMode OFF?");},
+                    0x10 => {println!("CLG?");},
+                    0x11 => {println!("COLOUR?");},
+                    0x12 => {println!("GCOL?");},
+                    0x13 => {println!("Define Logical Colour?");},
+                    0x16 => {println!("MODE?");},
+                    0x17 => {
+                        println!("VDU23.");
                         match self.rx.recv().unwrap() {
-                            0x80 => println!("VDP_GP"),
-                            0x81 => println!("VDP_KEYCODE"),
-                            n => println!("Unknown VSC command: {:#02X?}.", n),
+                            0x00 => {
+                                println!("Video System Control.");
+                                match self.rx.recv().unwrap() {
+                                    0x80 => println!("VDP_GP"),
+                                    0x81 => println!("VDP_KEYCODE"),
+                                    n => println!("Unknown VSC command: {:#02X?}.", n),
+                                }
+                            },
+                            0x01 => println!("Cursor Control?"),
+                            0x07 => println!("Scroll?"),
+                            0x1B => println!("Sprite Control?"),
+                            n => println!("Unknown VDU command: {:#02X?}.", n),
                         }
                     },
-                    0x01 => println!("Cursor Control?"),
-                    0x07 => println!("Scroll?"),
-                    0x1B => println!("Sprite Control?"),
-                    n => println!("Unknown VDU command: {:#02X?}.", n),
+                    0x19 => {println!("PLOT?");},
+                    0x1D => {println!("VDU_29?");},
+                    0x1E => {println!("Home."); self.cursor.home();},
+                    0x1F => {println!("TAB?");},
+                    0x7F => {println!("BACKSPACE?");},
+                    n => println!("Unknown Command {:#02X?} received!", n),
                 }
             },
-            0x19 => {println!("PLOT?");},
-            0x1D => {println!("VDU_29?");},
-            0x1E => {println!("Home."); self.cursor.home();},
-            0x1F => {println!("TAB?");},
-            0x7F => {println!("BACKSPACE?");},
-            n => println!("Unknown Command {:#02X?} received!", n),
+            Err(_e) => ()
         }
     }
 }
