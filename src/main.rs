@@ -18,7 +18,7 @@ pub fn main() -> Result<(), String> {
     let screen_height = 384;
     let font_width = 8;
     let font_height = 8;
-    let scale = 1;
+    let scale = 2;
     let serial_active = false;
     let mut esp_boot_output = true;
 
@@ -59,38 +59,47 @@ pub fn main() -> Result<(), String> {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'running,
-                Event::KeyDown { keycode, keymod, ..} => 
-                {
+                Event::KeyUp {keycode, keymod, ..} => {
                     match keycode {
                         Some(keycode) =>
                         {
                             let mut ascii = keycode as u8;
-                            if ascii < 127 && ascii >= 32
+                            println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
+                            if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
                             {
-                                println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
-                                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
-                                {
-                                    if ascii < 65 {
-                                        ascii -= 16;
-                                    }
-                                    else {
-                                        ascii -= 32;
-                                    }
+                                if ascii < 65 {
+                                    ascii -= 16;
                                 }
-                                vdp.send_key(ascii);
-                                // render_char(&mut canvas, ascii.try_into().unwrap(), cursor.position_x, cursor.position_y);
-                                // cursor.right();
+                                else {
+                                    ascii -= 32;
+                                }
                             }
-                            else
+                            vdp.send_key(ascii, true);
+                        },
+                        None => (),
+                    }
+                },
+                Event::KeyDown { keycode, keymod, ..} => {
+                    match keycode {
+                        Some(keycode) =>
+                        {
+                            let mut ascii = keycode as u8;
+                            println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
+                            if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
                             {
-                                println!("Ignored key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
+                                if ascii < 65 {
+                                    ascii -= 16;
+                                }
+                                else {
+                                    ascii -= 32;
+                                }
                             }
+                            vdp.send_key(ascii, false);
                         },
                         None => println!("Invalid key pressed."),
                     }
-
                 },
-                _ => {}
+                _ => ()
             }
         }
 
