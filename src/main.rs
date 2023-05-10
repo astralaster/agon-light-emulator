@@ -15,61 +15,8 @@ use std::sync::mpsc;
 
 mod VDP;
 
-use iz80::*;
-
-const ROM_SIZE: usize = 0x40000; // 256 KiB
-const RAM_SIZE: usize = 0x80000; // 512 KiB
-const MEM_SIZE: usize = ROM_SIZE + RAM_SIZE;
-
-pub struct AgonMachine {
-    mem: [u8; MEM_SIZE],
-    io: [u8; 65536],
-    tx: Sender<u8>,
-    rx: Receiver<u8>
-}
-
-impl AgonMachine {
-    /// Returns a new AgonMachine instance
-    pub fn new(tx : Sender<u8>, rx : Receiver<u8>) -> AgonMachine {
-        AgonMachine {
-            mem: [0; MEM_SIZE],
-            io: [0; 65536],
-            tx: tx,
-            rx: rx
-        }
-    }
-}
-
-impl Machine for AgonMachine {
-    fn peek(&self, address: u32) -> u8 {
-        self.mem[address as usize]
-    }
-    fn poke(&mut self, address: u32, value: u8) {
-        self.mem[address as usize] = value;
-    }
-
-    fn port_in(&mut self, address: u16) -> u8 {
-        //println!("IN({:02X}) = 0", address);
-        if address == 0xa2 {
-            0x0 // UART0 clear to send
-        } else if address == 0xc5 {
-            0x40
-            // UART_LSR_ETX		EQU 	%40
-        } else if address == 0x81 /* timer0 low byte */ {
-            0x0
-        } else if address == 0x82 /* timer0 high byte */ {
-            0x0
-        } else {
-            self.io[address as usize]
-        }
-    }
-    fn port_out(&mut self, address: u16, value: u8) {
-        if address == 0xc0 /* UART0_REG_THR */ {
-            self.tx.send(value);
-        }
-        self.io[address as usize] = value;
-    }
-}
+use iz80::AgonMachine;
+use iz80::Cpu;
 
 pub fn read_serial(port : &mut Box<dyn SerialPort>) -> Option<u8>
 {
@@ -100,27 +47,8 @@ pub fn main() -> Result<(), String> {
     let cpu_thread = thread::spawn(move || {
         // Prepare the device
         let mut machine = AgonMachine::new(tx_EZ802VDP, rx_VDP2EZ80);
-        let mut cpu = Cpu::new_ez80();
-
-        // Load program inline or from a file with:
-        let code = match std::fs::read("MOS.bin") {
-            Ok(data) => data,
-            Err(e) => {
-                println!("Error opening MOS.bin: {:?}", e);
-                std::process::exit(-1);
-            }
-        };
-
-        for (i, e) in code.iter().enumerate() {
-            machine.poke(i as u32, *e);
-        }
-
-        // Run emulation
-        cpu.state.set_pc(0x0000);
-
-        loop {
-            cpu.execute_instruction(&mut machine);
-        }
+        machine.start();
+        println!("Cpu thread finished.");
     });
 
     let sdl_context = sdl2::init()?;
