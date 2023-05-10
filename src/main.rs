@@ -2,12 +2,7 @@ extern crate sdl2;
 
 use sdl2::event::Event;
 use sdl2::keyboard::{Keycode, Mod};
-use sdl2::pixels::{Color, PixelFormatEnum};
-use sdl2::rect::{Point, Rect, self};
-use sdl2::render::Canvas;
-use sdl2::sys::{self, SDL_Point};
-use sdl2::video::Window;
-use serialport::SerialPort;
+use sdl2::pixels::Color;
 use std::thread;
 use std::time::Duration;
 use std::sync::mpsc::{Sender, Receiver};
@@ -16,18 +11,6 @@ use std::sync::mpsc;
 mod VDP;
 
 use iz80::AgonMachine;
-use iz80::Cpu;
-
-pub fn read_serial(port : &mut Box<dyn SerialPort>) -> Option<u8>
-{
-    let mut serial_buf: Vec<u8> = vec![0; 1];
-    let mut read_bytes = 0;
-        match port.read(serial_buf.as_mut_slice())
-        {
-            Ok(n) => return Some(serial_buf[0]),
-            Err(_e) => return None,
-        }
-}
 
 pub fn main() -> Result<(), String> {
 
@@ -35,7 +18,7 @@ pub fn main() -> Result<(), String> {
     let screen_height = 384;
     let font_width = 8;
     let font_height = 8;
-    let scale = 2;
+    let scale = 1;
     let serial_active = false;
     let mut esp_boot_output = true;
 
@@ -94,6 +77,7 @@ pub fn main() -> Result<(), String> {
                                         ascii -= 32;
                                     }
                                 }
+                                vdp.send_key(ascii);
                                 // render_char(&mut canvas, ascii.try_into().unwrap(), cursor.position_x, cursor.position_y);
                                 // cursor.right();
                             }

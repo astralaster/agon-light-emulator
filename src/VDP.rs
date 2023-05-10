@@ -119,6 +119,23 @@ impl VDP {
         self.cursor.position_y = 0;
     }
 
+    pub fn send_key(&mut self, keycode: u8){
+        let mut keyboard_packet: Vec<u8> = vec![keycode, 0, 0, 0];
+		self.send_packet(0x1, keyboard_packet.len() as u8, &mut keyboard_packet);
+    }
+
+    fn send_packet(&mut self, code: u8, len: u8, data: &mut Vec<u8>) {
+        let mut output: Vec<u8> = Vec::new();
+        output.push(code + 0x80 as u8); 
+        output.push(len);
+        output.append(data);
+        for byte in output.iter() {
+            self.tx.send(*byte);
+        }
+        println!("Send packet to MOS: {:#02X?}", output);
+    }
+    
+
     pub fn run(&mut self) {
         match self.rx.try_recv() {
             Ok(n) => {
@@ -150,8 +167,27 @@ impl VDP {
                             0x00 => {
                                 println!("Video System Control.");
                                 match self.rx.recv().unwrap() {
-                                    0x80 => println!("VDP_GP"),
+                                    0x80 => {
+                                        println!("VDP_GP.");
+                                        let mut packet = Vec::new();
+                                        packet.push(self.rx.recv().unwrap());
+                                        self.send_packet(0x00, packet.len() as u8, &mut packet);
+                                    },
                                     0x81 => println!("VDP_KEYCODE"),
+                                    0x86 => {
+                                        println!("Mode Information");
+                                        println!("Screen width {} Screen height {}", self.cursor.screen_width, self.cursor.screen_height);
+                                        let mut packet: Vec<u8> = vec![
+                                            self.cursor.screen_width.to_le_bytes()[0],
+                                            self.cursor.screen_width.to_le_bytes()[1],
+                                            self.cursor.screen_height.to_le_bytes()[0],
+                                            self.cursor.screen_height.to_le_bytes()[1],
+                                            (self.cursor.screen_width / self.cursor.font_width) as u8,
+                                            (self.cursor.screen_height / self.cursor.font_height) as u8,
+                                            16
+                                         ];
+                                        self.send_packet(0x06, packet.len() as u8, &mut packet);
+                                    },
                                     n => println!("Unknown VSC command: {:#02X?}.", n),
                                 }
                             },
