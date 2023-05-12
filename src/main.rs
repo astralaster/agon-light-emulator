@@ -59,47 +59,19 @@ pub fn main() -> Result<(), String> {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'running,
-                Event::KeyUp {keycode, keymod, ..} => {
+                Event::KeyUp {keycode, keymod, ..}  | Event::KeyDown {keycode, keymod, ..} => {
                     match keycode {
                         Some(keycode) =>
                         {
-                            let mut ascii = keycode as u8;
+                            let ascii = VDP::VDP::sdl_keycode_to_mos_keycode(keycode, keymod);
                             println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
-                            if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
-                            {
-                                if ascii < 65 {
-                                    ascii -= 16;
-                                }
-                                else {
-                                    ascii -= 32;
-                                }
-                            }
-                            vdp.send_key(ascii, true);
-                        },
-                        None => (),
-                    }
-                },
-                Event::KeyDown { keycode, keymod, ..} => {
-                    match keycode {
-                        Some(keycode) =>
-                        {
-                            let mut ascii = keycode as u8;
-                            println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
-                            if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
-                            {
-                                if ascii < 65 {
-                                    ascii -= 16;
-                                }
-                                else {
-                                    ascii -= 32;
-                                }
-                            }
-                            vdp.send_key(ascii, false);
+                            let up = matches!(event, Event::KeyUp{..});
+                            vdp.send_key(ascii, up);
                         },
                         None => println!("Invalid key pressed."),
                     }
                 },
-                _ => ()
+                _ => (),
             }
         }
 

@@ -1,6 +1,8 @@
 
 use std::sync::mpsc::{Sender, Receiver};
 
+use sdl2::keyboard::{self, Mod};
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::Canvas;
@@ -123,6 +125,30 @@ impl VDP {
         let mut keyboard_packet: Vec<u8> = vec![keycode, 0, 0, up as u8];
 		self.send_packet(0x1, keyboard_packet.len() as u8, &mut keyboard_packet);
     }
+
+    pub fn sdl_keycode_to_mos_keycode(keycode: sdl2::keyboard::Keycode, keymod: sdl2::keyboard::Mod) -> u8{
+        match keycode {
+            Keycode::Left => 0x08,
+            Keycode::Tab => 0x09,
+            Keycode::Right => 0x15,
+            Keycode::Down => 0x0A,
+            Keycode::Backspace => 0x7F,
+            _ => {
+                let mut ascii = keycode as u8;
+                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
+                {
+                    if ascii < 65 {
+                        ascii -= 16;
+                    }
+                    else {
+                        ascii -= 32;
+                    }
+                }
+                ascii
+            },
+        }
+    }
+
 
     fn send_packet(&mut self, code: u8, len: u8, data: &mut Vec<u8>) {
         let mut output: Vec<u8> = Vec::new();
