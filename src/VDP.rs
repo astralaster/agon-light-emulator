@@ -113,6 +113,12 @@ impl VDP {
             }
         }
     }
+
+    pub fn backspace(&mut self) {
+        self.cursor.left();
+        self.render_char(b' ');
+    }
+
     
     pub fn cls(&mut self) {
         self.canvas.set_draw_color(Color::RGB(0, 0, 0));
@@ -227,7 +233,10 @@ impl VDP {
                     0x1D => {println!("VDU_29?");},
                     0x1E => {println!("Home."); self.cursor.home();},
                     0x1F => {println!("TAB?");},
-                    0x7F => {println!("BACKSPACE?");},
+                    0x7F => {
+                        println!("BACKSPACE.");
+                        self.backspace();
+                    },
                     n => println!("Unknown Command {:#02X?} received!", n),
                 }
             },
