@@ -65,7 +65,10 @@ pub struct VDP {
     cursor: Cursor,
     canvas: Canvas<Window>,
     tx: Sender<u8>,
-    rx: Receiver<u8>
+    rx: Receiver<u8>,
+    foreground_color: sdl2::pixels::Color,
+    background_color: sdl2::pixels::Color,
+    test_color: sdl2::pixels::Color,
 }
 
 impl VDP {
@@ -74,7 +77,10 @@ impl VDP {
             cursor: Cursor::new(canvas.window().drawable_size().0 as i32, canvas.window().drawable_size().1 as i32, 8, 8),
             canvas: canvas,
             tx: tx,
-            rx: rx
+            rx: rx,
+            foreground_color: Color::RGB(255, 255, 255),
+            background_color: Color::RGB(0, 0, 0),
+            test_color: Color::RGB(255, 0, 0),
         }
     }
 
@@ -103,12 +109,16 @@ impl VDP {
             let shifted_ascii = ascii - 32;
             if shifted_ascii < (FONT_BYTES.len() / 8) as u8
             {
+                self.canvas.set_draw_color(self.background_color);
+                self.canvas.fill_rect(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
                 let start = 8*shifted_ascii as usize;
                 let end = start+8 as usize;
                 let points = Self::get_points(FONT_BYTES[start..end].to_vec());
-                self.canvas.set_draw_color(Color::RGB(255, 255, 255));
+                self.canvas.set_draw_color(self.foreground_color);
+                let viewport = self.canvas.viewport();
                 self.canvas.set_viewport(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
                 self.canvas.draw_points(&points[..]);
+                self.canvas.set_viewport(viewport);
                 self.canvas.present();
             }
         }
@@ -121,7 +131,7 @@ impl VDP {
 
     
     pub fn cls(&mut self) {
-        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
+        self.canvas.set_draw_color(self.background_color);
         self.canvas.clear();
         self.cursor.position_x = 0;
         self.cursor.position_y = 0;

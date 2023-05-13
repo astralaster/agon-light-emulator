@@ -12,6 +12,23 @@ mod VDP;
 
 use iz80::AgonMachine;
 
+// AgonMachine {
+//     fn load_basic(&mut self) {
+//         let code = match std::fs::read("bbcbasic.bin") {
+//             Ok(data) => data,
+//             Err(e) => {
+//                 println!("Error opening bbcbasic.bin: {:?}", e);
+//                 std::process::exit(-1);
+//             }
+//         };
+//         for (i, e) in code.iter().enumerate() {
+//             self.poke((0x40000 + i) as u32, *e);
+//         }
+//         println!("Loaded basic!");
+//     }
+// }
+
+
 pub fn main() -> Result<(), String> {
 
     let screen_width = 512;
@@ -63,10 +80,15 @@ pub fn main() -> Result<(), String> {
                     match keycode {
                         Some(keycode) =>
                         {
-                            let ascii = VDP::VDP::sdl_keycode_to_mos_keycode(keycode, keymod);
-                            println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
-                            let up = matches!(event, Event::KeyUp{..});
-                            vdp.send_key(ascii, up);
+                            match keycode {
+                                Keycode::LShift | Keycode::RShift | Keycode::LAlt | Keycode::RAlt | Keycode::LCtrl | Keycode::RCtrl | Keycode::CapsLock => (),
+                                _ => {
+                                    let ascii = VDP::VDP::sdl_keycode_to_mos_keycode(keycode, keymod);
+                                    println!("Pressed key:{} with mod:{} ascii:{}", keycode, keymod, ascii);
+                                    let up = matches!(event, Event::KeyUp{..});
+                                    vdp.send_key(ascii, up);
+                                }
+                            }
                         },
                         None => println!("Invalid key pressed."),
                     }
