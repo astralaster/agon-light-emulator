@@ -1,5 +1,6 @@
 
 use std::sync::mpsc::{Sender, Receiver};
+use std::time::Instant;
 
 use sdl2::keyboard::{self, Mod};
 use sdl2::keyboard::Keycode;
@@ -69,10 +70,12 @@ pub struct VDP {
     foreground_color: sdl2::pixels::Color,
     background_color: sdl2::pixels::Color,
     test_color: sdl2::pixels::Color,
+    vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    last_vsync: Instant,
 }
 
 impl VDP {
-    pub fn new(canvas: Canvas<Window>, tx : Sender<u8>, rx : Receiver<u8>) -> VDP {
+    pub fn new(canvas: Canvas<Window>, tx : Sender<u8>, rx : Receiver<u8>, vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>) -> VDP {
         VDP {
             cursor: Cursor::new(canvas.window().drawable_size().0 as i32, canvas.window().drawable_size().1 as i32, 8, 8),
             canvas: canvas,
@@ -81,6 +84,8 @@ impl VDP {
             foreground_color: Color::RGB(255, 255, 255),
             background_color: Color::RGB(0, 0, 0),
             test_color: Color::RGB(255, 0, 0),
+            vsync_counter: vsync_counter,
+            last_vsync: Instant::now(),
         }
     }
 
@@ -251,6 +256,11 @@ impl VDP {
                 }
             },
             Err(_e) => ()
+        }
+        // a fake vsync every 16ms
+        if self.last_vsync.elapsed().as_millis() > 16 {
+            self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.last_vsync = Instant::now();
         }
     }
 }
