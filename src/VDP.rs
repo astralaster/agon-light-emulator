@@ -2,6 +2,8 @@
 use std::sync::mpsc::{Sender, Receiver};
 use std::time::Instant;
 
+use sdl2::Sdl;
+use sdl2::event::Event;
 use sdl2::keyboard::{self, Mod};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -62,34 +64,126 @@ impl Cursor {
     }
 }
 
+struct VideoMode{
+    colors: u8,
+    screen_width: u32,
+    screen_height: u32,
+    refresh_rate: u8,
+}
+
+static VIDEO_MODES: [VideoMode; 4] = [VideoMode{colors: 2, screen_width: 1024, screen_height: 768, refresh_rate: 60},
+                                    VideoMode{colors: 16, screen_width: 512, screen_height: 384, refresh_rate: 60},
+                                    VideoMode{colors: 64, screen_width: 320, screen_height: 240, refresh_rate: 70},
+                                    VideoMode{colors: 16, screen_width: 640, screen_height: 480, refresh_rate: 60}];
+
 pub struct VDP {
     cursor: Cursor,
+    sdl_context: Sdl,
     canvas: Canvas<Window>,
     tx: Sender<u8>,
     rx: Receiver<u8>,
     foreground_color: sdl2::pixels::Color,
     background_color: sdl2::pixels::Color,
     test_color: sdl2::pixels::Color,
+    cursor_active: bool,
+    cursor_last_change: Instant,
     vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
     last_vsync: Instant,
+    current_video_mode: usize,
+    text: Vec<u8>,
+    scale: f32,
 }
 
 impl VDP {
-    pub fn new(canvas: Canvas<Window>, tx : Sender<u8>, rx : Receiver<u8>, vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>) -> VDP {
-        VDP {
-            cursor: Cursor::new(canvas.window().drawable_size().0 as i32, canvas.window().drawable_size().1 as i32, 8, 8),
+    pub fn new(tx: Sender<u8>, rx: Receiver<u8>, vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>) -> Result<VDP, String> {
+        let mode =  &VIDEO_MODES[1];
+        let scale = 2.0f32;
+
+        let sdl_context = sdl2::init()?;
+        let video_subsystem = sdl_context.video()?;
+    
+        let mut window = video_subsystem
+            .window("agon-light-emulator", mode.screen_width * scale as u32, mode.screen_height * scale as u32)
+            .position_centered()
+            .opengl()
+            .build()
+            .map_err(|e| e.to_string())?;
+    
+        let mut canvas = window.into_canvas().present_vsync().build().map_err(|e| e.to_string())?;
+        canvas.set_scale(scale, scale);
+     
+        Ok(VDP {
+            cursor: Cursor::new(mode.screen_width as i32, mode.screen_height as i32, 8, 8),
+            sdl_context: sdl_context,
             canvas: canvas,
             tx: tx,
             rx: rx,
             foreground_color: Color::RGB(255, 255, 255),
             background_color: Color::RGB(0, 0, 0),
             test_color: Color::RGB(255, 0, 0),
+            cursor_active: false,
+            cursor_last_change: Instant::now(),
             vsync_counter: vsync_counter,
             last_vsync: Instant::now(),
-        }
+            current_video_mode: 1,
+            text: Vec::new(),
+            scale: scale,
+        })
     }
 
-    fn get_points(bytes : Vec<u8>) -> Vec<Point>
+    pub fn start(&mut self) -> Result<(), String> {
+        self.change_mode(1);
+        self.bootscreen();
+    
+        let mut event_pump = self.sdl_context.event_pump()?;
+    
+        'running: loop {
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. } => break 'running,
+                    Event::KeyUp {keycode, keymod, ..}  | Event::KeyDown {keycode, keymod, ..} => {
+                        match keycode {
+                            Some(keycode) =>
+                            {
+                                match keycode {
+                                    Keycode::LShift | Keycode::RShift | Keycode::LAlt | Keycode::RAlt | Keycode::LCtrl | Keycode::RCtrl | Keycode::CapsLock => (),
+                                    Keycode::F1 => self.change_mode(0),
+                                    Keycode::F2 => self.change_mode(1),
+                                    Keycode::F3 => self.change_mode(2),
+                                    Keycode::F4 => self.change_mode(3),
+                                    _ => {
+                                        let ascii = Self::sdl_keycode_to_mos_keycode(keycode, keymod);
+                                        let up = matches!(event, Event::KeyUp{..});
+                                        println!("Pressed key:{} with mod:{} ascii:{} up:{}", keycode, keymod, ascii, up);
+                                        self.send_key(ascii, up);
+                                    }
+                                }
+                            },
+                            None => println!("Invalid key pressed."),
+                        }
+                    },
+                    _ => (),
+                }
+            }
+    
+            self.do_comms();
+        }
+
+        Ok(())
+    }
+
+    fn change_mode(&mut self, mode: usize) {
+        let video_mode =  &VIDEO_MODES[mode];
+        self.cursor.screen_height = video_mode.screen_height as i32;
+        self.cursor.screen_width = video_mode.screen_width as i32;
+        self.canvas.window_mut().set_size(video_mode.screen_width * self.scale as u32, video_mode.screen_height * self.scale as u32);
+        self.current_video_mode = mode;
+        let num_chars = video_mode.screen_width / self.cursor.font_width as u32 * video_mode.screen_height / self.cursor.font_height as u32;
+        self.text.resize(num_chars as usize, 0);
+        self.cls();
+    }
+
+    fn get_points_from_font(bytes : Vec<u8>) -> Vec<Point>
     {
         let mut points: Vec<Point> = Vec::new();
         let mut y = 0;
@@ -107,31 +201,65 @@ impl VDP {
         points
     }
     
-    fn render_char(&mut self, ascii : u8)
+    fn render_text(&mut self)
     {
-        if ascii >= 32
-        {
-            let shifted_ascii = ascii - 32;
-            if shifted_ascii < (FONT_BYTES.len() / 8) as u8
-            {
-                self.canvas.set_draw_color(self.background_color);
-                self.canvas.fill_rect(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
-                let start = 8*shifted_ascii as usize;
-                let end = start+8 as usize;
-                let points = Self::get_points(FONT_BYTES[start..end].to_vec());
-                self.canvas.set_draw_color(self.foreground_color);
-                let viewport = self.canvas.viewport();
-                self.canvas.set_viewport(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
-                self.canvas.draw_points(&points[..]);
-                self.canvas.set_viewport(viewport);
-                self.canvas.present();
+        for (i, ascii) in self.text.iter().enumerate() {
+            if *ascii == 0x0 {
+                continue;
             }
+            //println!("Render {:#02X?}", ascii);
+            let start = (8 * *ascii as u32) as usize;
+            let end = start+8 as usize;
+            let mut points = Self::get_points_from_font(FONT_BYTES[start..end].to_vec());
+            self.canvas.set_draw_color(self.foreground_color);
+            let video_mode = &VIDEO_MODES[self.current_video_mode];
+            for point in points.iter_mut() {
+                point.x += (i as i32 % (video_mode.screen_width as i32 / self.cursor.font_width)) * self.cursor.font_width;
+                point.y += (i as i32 / (video_mode.screen_height as i32 / self.cursor.font_height)) * self.cursor.font_height;
+            }
+            self.canvas.draw_points(&points[..]);
         }
     }
 
+    fn set_text(&mut self, ascii: u8) {
+        if ascii >= 32
+        {
+            let shifted_ascii = ascii - 32;
+            let x = self.cursor.position_x / self.cursor.font_width;
+            let y = self.cursor.position_y / self.cursor.font_height;
+            let stride = VIDEO_MODES[self.current_video_mode].screen_width / self.cursor.font_width as u32;
+            self.text[(y * stride as i32 + x) as usize] = shifted_ascii;
+        }
+    }
+
+    pub fn bootscreen(&mut self) {
+        let boot_message = "Agon Quark VDP Version 1.03";
+        for byte in boot_message.as_bytes() {
+            self.set_text(*byte);
+            self.cursor.right();
+        }
+        self.cursor.down();
+        self.cursor.home();
+    }
+
+    pub fn blink_cusor(&mut self) {
+        if self.cursor_last_change.elapsed().as_millis() < 500 {
+            return;
+        }
+        if self.cursor_active {
+            self.canvas.set_draw_color(self.foreground_color);
+        } else {
+            self.canvas.set_draw_color(self.background_color);
+        }
+        self.cursor_active = !self.cursor_active;
+        self.canvas.fill_rect(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
+        self.cursor_last_change = Instant::now();
+    }
+
+
     pub fn backspace(&mut self) {
         self.cursor.left();
-        self.render_char(b' ');
+        self.set_text(b' ');
     }
 
     
@@ -140,6 +268,9 @@ impl VDP {
         self.canvas.clear();
         self.cursor.position_x = 0;
         self.cursor.position_y = 0;
+        for char in &mut self.text {
+             *char = 0;
+        }
     }
 
     pub fn send_key(&mut self, keycode: u8, up: bool){
@@ -183,13 +314,14 @@ impl VDP {
     }
     
 
-    pub fn run(&mut self) {
+    pub fn do_comms(&mut self) {
+        //self.blink_cusor();
         match self.rx.try_recv() {
             Ok(n) => {
                 match n {
                     n if n >= 0x20 && n != 0x7F => {
                         println!("Received character: {}", n as char);
-                        self.render_char(n);
+                        self.set_text(n);
                         self.cursor.right();  
                     },
                     0x08 => {println!("Cursor left."); self.cursor.left();},
@@ -258,9 +390,13 @@ impl VDP {
             Err(_e) => ()
         }
         // a fake vsync every 16ms
-        if self.last_vsync.elapsed().as_millis() > 16 {
+        if self.last_vsync.elapsed().as_millis() > (1000 / VIDEO_MODES[self.current_video_mode].refresh_rate as u128) {
             self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.last_vsync = Instant::now();
+            self.canvas.present();
+            self.canvas.set_draw_color(self.background_color);
+            self.canvas.clear();
+            self.render_text();
         }
     }
 }
