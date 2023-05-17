@@ -90,7 +90,7 @@ pub struct VDP {
     vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
     last_vsync: Instant,
     current_video_mode: usize,
-    text: Vec<u8>,
+    text: Vec<Vec<u8>>,
     scale: f32,
 }
 
@@ -166,7 +166,18 @@ impl VDP {
                 }
             }
     
+            
             self.do_comms();
+            self.blink_cusor();
+            // a fake vsync every 16ms
+            if self.last_vsync.elapsed().as_millis() > (1000 / VIDEO_MODES[self.current_video_mode].refresh_rate as u128) {
+                self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.last_vsync = Instant::now();
+                self.canvas.present();
+                self.canvas.set_draw_color(self.background_color);
+                self.canvas.clear();
+                self.render_text();
+            }
         }
 
         Ok(())
@@ -178,8 +189,7 @@ impl VDP {
         self.cursor.screen_width = video_mode.screen_width as i32;
         self.canvas.window_mut().set_size(video_mode.screen_width * self.scale as u32, video_mode.screen_height * self.scale as u32);
         self.current_video_mode = mode;
-        let num_chars = video_mode.screen_width / self.cursor.font_width as u32 * video_mode.screen_height / self.cursor.font_height as u32;
-        self.text.resize(num_chars as usize, 0);
+        self.text.resize((video_mode.screen_width / self.cursor.font_width as u32) as usize, vec![0; (video_mode.screen_height / self.cursor.font_height as u32) as usize]);
         self.cls();
     }
 
@@ -203,21 +213,23 @@ impl VDP {
     
     fn render_text(&mut self)
     {
-        for (i, ascii) in self.text.iter().enumerate() {
-            if *ascii == 0x0 {
-                continue;
+        for (y, row) in self.text.iter().enumerate() {
+            for (x, ascii)  in row.iter().enumerate() {
+                if *ascii == 0x0 {
+                    continue;
+                }
+                //println!("Render {:#02X?}", ascii);
+                let start = (8 * *ascii as u32) as usize;
+                let end = start+8 as usize;
+                let mut points = Self::get_points_from_font(FONT_BYTES[start..end].to_vec());
+                self.canvas.set_draw_color(self.foreground_color);
+                let video_mode = &VIDEO_MODES[self.current_video_mode];
+                for point in points.iter_mut() {
+                    point.x += x as i32 * self.cursor.font_width;
+                    point.y += y as i32 * self.cursor.font_height;
+                }
+                self.canvas.draw_points(&points[..]);
             }
-            //println!("Render {:#02X?}", ascii);
-            let start = (8 * *ascii as u32) as usize;
-            let end = start+8 as usize;
-            let mut points = Self::get_points_from_font(FONT_BYTES[start..end].to_vec());
-            self.canvas.set_draw_color(self.foreground_color);
-            let video_mode = &VIDEO_MODES[self.current_video_mode];
-            for point in points.iter_mut() {
-                point.x += (i as i32 % (video_mode.screen_width as i32 / self.cursor.font_width)) * self.cursor.font_width;
-                point.y += (i as i32 / (video_mode.screen_height as i32 / self.cursor.font_height)) * self.cursor.font_height;
-            }
-            self.canvas.draw_points(&points[..]);
         }
     }
 
@@ -225,10 +237,10 @@ impl VDP {
         if ascii >= 32
         {
             let shifted_ascii = ascii - 32;
-            let x = self.cursor.position_x / self.cursor.font_width;
-            let y = self.cursor.position_y / self.cursor.font_height;
+            let x: usize = (self.cursor.position_x / self.cursor.font_width) as usize;
+            let y: usize = (self.cursor.position_y / self.cursor.font_height) as usize;
             let stride = VIDEO_MODES[self.current_video_mode].screen_width / self.cursor.font_width as u32;
-            self.text[(y * stride as i32 + x) as usize] = shifted_ascii;
+            self.text[y][x] = shifted_ascii;
         }
     }
 
@@ -268,8 +280,10 @@ impl VDP {
         self.canvas.clear();
         self.cursor.position_x = 0;
         self.cursor.position_y = 0;
-        for char in &mut self.text {
-             *char = 0;
+        for row in &mut self.text {
+            for char in row {
+                *char = 0;
+            }
         }
     }
 
@@ -321,7 +335,6 @@ impl VDP {
     
 
     pub fn do_comms(&mut self) {
-        //self.blink_cusor();
         match self.rx.try_recv() {
             Ok(n) => {
                 match n {
@@ -373,7 +386,7 @@ impl VDP {
                                             self.cursor.screen_height.to_le_bytes()[1],
                                             (self.cursor.screen_width / self.cursor.font_width) as u8,
                                             (self.cursor.screen_height / self.cursor.font_height) as u8,
-                                            16
+                                            VIDEO_MODES[self.current_video_mode].colors
                                          ];
                                         self.send_packet(0x06, packet.len() as u8, &mut packet);
                                     },
@@ -398,15 +411,6 @@ impl VDP {
                 }
             },
             Err(_e) => ()
-        }
-        // a fake vsync every 16ms
-        if self.last_vsync.elapsed().as_millis() > (1000 / VIDEO_MODES[self.current_video_mode].refresh_rate as u128) {
-            self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            self.last_vsync = Instant::now();
-            self.canvas.present();
-            self.canvas.set_draw_color(self.background_color);
-            self.canvas.clear();
-            self.render_text();
         }
     }
 }
