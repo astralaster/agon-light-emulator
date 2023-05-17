@@ -273,9 +273,15 @@ impl VDP {
         }
     }
 
-    pub fn send_key(&mut self, keycode: u8, up: bool){
+    pub fn send_key(&self, keycode: u8, up: bool){
         let mut keyboard_packet: Vec<u8> = vec![keycode, 0, 0, up as u8];
 		self.send_packet(0x1, keyboard_packet.len() as u8, &mut keyboard_packet);
+    }
+
+    fn send_cursor_position(&self) {
+        let mut cursor_position_packet: Vec<u8> = vec![(self.cursor.position_x / self.cursor.font_width) as u8,
+        (self.cursor.position_y / self.cursor.font_height) as u8];
+        self.send_packet(0x02, cursor_position_packet.len() as u8, &mut cursor_position_packet);	
     }
 
     pub fn sdl_keycode_to_mos_keycode(keycode: sdl2::keyboard::Keycode, keymod: sdl2::keyboard::Mod) -> u8{
@@ -302,7 +308,7 @@ impl VDP {
     }
 
 
-    fn send_packet(&mut self, code: u8, len: u8, data: &mut Vec<u8>) {
+    fn send_packet(&self, code: u8, len: u8, data: &mut Vec<u8>) {
         let mut output: Vec<u8> = Vec::new();
         output.push(code + 0x80 as u8); 
         output.push(len);
@@ -353,6 +359,10 @@ impl VDP {
                                         self.send_packet(0x00, packet.len() as u8, &mut packet);
                                     },
                                     0x81 => println!("VDP_KEYCODE"),
+                                    0x82 => {
+                                        println!("Send Cursor Position");
+                                        self.send_cursor_position();
+                                    },
                                     0x86 => {
                                         println!("Mode Information");
                                         println!("Screen width {} Screen height {}", self.cursor.screen_width, self.cursor.screen_height);
