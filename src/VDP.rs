@@ -304,17 +304,46 @@ impl VDP {
             Keycode::Tab => 0x09,
             Keycode::Right => 0x15,
             Keycode::Down => 0x0A,
+            Keycode::Up => 0x0B,
             Keycode::Backspace => 0x7F,
             _ => {
                 let mut ascii = keycode as u8;
                 if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
                 {
-                    if ascii < 65 {
-                        ascii -= 16;
-                    }
-                    else {
+                    if ascii >= b'a' && ascii <= b'z' {
                         ascii -= 32;
                     }
+                    else {
+                        ascii = match ascii {
+                            // This works for US layout only.
+                            b'`' => b'~',
+                            b'1' => b'!',
+                            b'2' => b'@',
+                            b'3' => b'#',
+                            b'4' => b'$',
+                            b'5' => b'%',
+                            b'6' => b'^',
+                            b'7' => b'&',
+                            b'8' => b'*',
+                            b'9' => b'(',
+                            b'0' => b')',
+                            b'-' => b'_',
+                            b'=' => b'+',
+                            b'[' => b'{',
+                            b']' => b'}',
+                            b'\\' => b'|',
+                            b';' => b':',
+                            b'\'' => b'\"',
+                            b',' => b'<',
+                            b'.' => b'>',
+                            b'/' => b'?',
+                            _ => b' ',
+                        }
+                    }
+                }
+                else if keymod.contains(Mod::LCTRLMOD) || keymod.contains(Mod::RCTRLMOD)
+                {
+                    ascii = ascii & 0x1f;
                 }
                 ascii
             },
