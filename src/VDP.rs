@@ -255,17 +255,16 @@ impl VDP {
     }
 
     pub fn blink_cusor(&mut self) {
-        if self.cursor_last_change.elapsed().as_millis() < 500 {
-            return;
+        if self.cursor_last_change.elapsed().as_millis() > 500 {
+            self.cursor_active = !self.cursor_active;
+            self.cursor_last_change = Instant::now();
         }
         if self.cursor_active {
             self.canvas.set_draw_color(self.foreground_color);
         } else {
             self.canvas.set_draw_color(self.background_color);
         }
-        self.cursor_active = !self.cursor_active;
         self.canvas.fill_rect(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
-        self.cursor_last_change = Instant::now();
     }
 
 
