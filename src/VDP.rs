@@ -73,7 +73,7 @@ struct VideoMode{
 
 static VIDEO_MODES: [VideoMode; 4] = [VideoMode{colors: 2, screen_width: 1024, screen_height: 768, refresh_rate: 60},
                                     VideoMode{colors: 16, screen_width: 512, screen_height: 384, refresh_rate: 60},
-                                    VideoMode{colors: 64, screen_width: 320, screen_height: 240, refresh_rate: 70},
+                                    VideoMode{colors: 64, screen_width: 320, screen_height: 240, refresh_rate: 75},
                                     VideoMode{colors: 16, screen_width: 640, screen_height: 480, refresh_rate: 60}];
 
 pub struct VDP {
