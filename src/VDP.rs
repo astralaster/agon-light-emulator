@@ -189,7 +189,7 @@ impl VDP {
         self.cursor.screen_width = video_mode.screen_width as i32;
         self.canvas.window_mut().set_size(video_mode.screen_width * self.scale as u32, video_mode.screen_height * self.scale as u32);
         self.current_video_mode = mode;
-        self.text.resize((video_mode.screen_width / self.cursor.font_width as u32) as usize, vec![0; (video_mode.screen_height / self.cursor.font_height as u32) as usize]);
+        self.text.resize((video_mode.screen_height / self.cursor.font_height as u32) as usize, vec![0; (video_mode.screen_width / self.cursor.font_width as u32) as usize]);
         self.cls();
     }
 
@@ -321,7 +321,22 @@ impl VDP {
         }
     }
 
-
+    fn check_scroll(&mut self) {
+        if self.cursor.position_y >= self.cursor.screen_height {
+            self.cursor.up();            
+            println!("Scrolling, cursor y={}\n",self.cursor.position_y);
+            for y in 0..(self.cursor.screen_height / self.cursor.font_height) as usize {
+                for x in 0..(self.cursor.screen_width/ self.cursor.font_width) as usize {
+                    let mut new_char = 0u8;
+                    if (y+1) as i32 *self.cursor.font_height < self.cursor.screen_height {
+                        new_char = self.text[y+1][x];
+                    }
+                    self.text[y][x] = new_char;
+                }
+            }
+        }        
+    }
+    
     fn send_packet(&self, code: u8, len: u8, data: &mut Vec<u8>) {
         let mut output: Vec<u8> = Vec::new();
         output.push(code + 0x80 as u8); 
@@ -341,11 +356,13 @@ impl VDP {
                     n if n >= 0x20 && n != 0x7F => {
                         println!("Received character: {}", n as char);
                         self.set_text(n);
-                        self.cursor.right();  
+                        self.cursor.right();
+                        self.check_scroll();
                     },
                     0x08 => {println!("Cursor left."); self.cursor.left();},
                     0x09 => {println!("Cursor right."); self.cursor.right();},
-                    0x0A => {println!("Cursor down."); self.cursor.down();},
+                    0x0A => {println!("Cursor down."); self.cursor.down();
+                             self.check_scroll()},
                     0x0B => {println!("Cursor up."); self.cursor.up();},
                     0x0C => {
                         println!("CLS.");
@@ -402,7 +419,16 @@ impl VDP {
                     0x19 => {println!("PLOT?");},
                     0x1D => {println!("VDU_29?");},
                     0x1E => {println!("Home."); self.cursor.home();},
-                    0x1F => {println!("TAB?");},
+                    0x1F => {println!("TAB?");
+                             let x = self.rx.recv().unwrap() as i32 * self.cursor.font_width;
+                             let y = self.rx.recv().unwrap() as i32 * self.cursor.font_height;
+                             if (x < self.cursor.screen_width &&
+                                 y < self.cursor.screen_height)
+                             {
+                                 self.cursor.position_x = x;
+                                 self.cursor.position_y = y;
+                             }
+                    },
                     0x7F => {
                         println!("BACKSPACE.");
                         self.backspace();
