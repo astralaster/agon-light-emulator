@@ -368,7 +368,11 @@ impl VDP {
                     0x11 => {println!("COLOUR?");},
                     0x12 => {println!("GCOL?");},
                     0x13 => {println!("Define Logical Colour?");},
-                    0x16 => {println!("MODE?");},
+                    0x16 => {
+                        println!("MODE.");
+                        let mode = self.rx.recv().unwrap();
+                        self.change_mode(mode.into());
+                    },
                     0x17 => {
                         println!("VDU23.");
                         match self.rx.recv().unwrap() {
@@ -388,17 +392,7 @@ impl VDP {
                                     },
                                     0x86 => {
                                         println!("Mode Information");
-                                        println!("Screen width {} Screen height {}", self.cursor.screen_width, self.cursor.screen_height);
-                                        let mut packet: Vec<u8> = vec![
-                                            self.cursor.screen_width.to_le_bytes()[0],
-                                            self.cursor.screen_width.to_le_bytes()[1],
-                                            self.cursor.screen_height.to_le_bytes()[0],
-                                            self.cursor.screen_height.to_le_bytes()[1],
-                                            (self.cursor.screen_width / self.cursor.font_width) as u8,
-                                            (self.cursor.screen_height / self.cursor.font_height) as u8,
-                                            VIDEO_MODES[self.current_video_mode].colors
-                                         ];
-                                        self.send_packet(0x06, packet.len() as u8, &mut packet);
+                                        self.send_mode_information();
                                     },
                                     n => println!("Unknown VSC command: {:#02X?}.", n),
                                 }
@@ -431,5 +425,18 @@ impl VDP {
             },
             Err(_e) => ()
         }
+    }
+    fn send_mode_information(&mut self) {
+        println!("Screen width {} Screen height {}", self.cursor.screen_width, self.cursor.screen_height);
+        let mut packet: Vec<u8> = vec![
+            self.cursor.screen_width.to_le_bytes()[0],
+            self.cursor.screen_width.to_le_bytes()[1],
+            self.cursor.screen_height.to_le_bytes()[0],
+            self.cursor.screen_height.to_le_bytes()[1],
+            (self.cursor.screen_width / self.cursor.font_width) as u8,
+            (self.cursor.screen_height / self.cursor.font_height) as u8,
+            VIDEO_MODES[self.current_video_mode].colors
+         ];
+        self.send_packet(0x06, packet.len() as u8, &mut packet);
     }
 }
