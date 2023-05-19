@@ -1,10 +1,10 @@
 
 use std::sync::mpsc::{Sender, Receiver};
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
 use sdl2::Sdl;
 use sdl2::event::Event;
-use sdl2::keyboard::{self, Mod};
+use sdl2::keyboard::{self, Mod, Scancode};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
@@ -136,30 +136,32 @@ impl VDP {
         self.bootscreen();
     
         let mut event_pump = self.sdl_context.event_pump()?;
+        let mut ascii = 0u8;
     
         'running: loop {
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. } => break 'running,
-                    Event::KeyUp {keycode, keymod, ..}  | Event::KeyDown {keycode, keymod, ..} => {
-                        match keycode {
-                            Some(keycode) =>
-                            {
-                                match keycode {
-                                    Keycode::LShift | Keycode::RShift | Keycode::LAlt | Keycode::RAlt | Keycode::LCtrl | Keycode::RCtrl | Keycode::CapsLock => (),
-                                    Keycode::F1 => self.change_mode(0),
-                                    Keycode::F2 => self.change_mode(1),
-                                    Keycode::F3 => self.change_mode(2),
-                                    Keycode::F4 => self.change_mode(3),
+                    Event::TextInput { timestamp, window_id, text } => {
+                        println!("timestamp {} window_id {}, text {}", timestamp, window_id, text);
+                        ascii = *text.as_bytes().first().unwrap();
+                    },
+                    Event::KeyUp {keycode, keymod, scancode, ..}  | Event::KeyDown {keycode, keymod, scancode, ..} => {
+                        match scancode {
+                            Some(scancode) => {
+                                match scancode {
                                     _ => {
-                                        let ascii = Self::sdl_keycode_to_mos_keycode(keycode, keymod);
+                                        if ascii == 0 {
+                                            ascii = Self::sdl_scancode_to_mos_keycode(scancode, keymod);
+                                        }
                                         let up = matches!(event, Event::KeyUp{..});
-                                        println!("Pressed key:{} with mod:{} ascii:{} up:{}", keycode, keymod, ascii, up);
+                                        println!("Pressed key:{} with mod:{} ascii:{} scancode:{} up:{}", keycode.unwrap(), keymod, ascii, scancode, up);
                                         self.send_key(ascii, up);
-                                    }
+                                        ascii = 0;
+                                    },
                                 }
                             },
-                            None => println!("Invalid key pressed."),
+                            None => println!("Key without scancode pressed."),
                         }
                     },
                     _ => (),
@@ -298,26 +300,16 @@ impl VDP {
         self.send_packet(0x02, cursor_position_packet.len() as u8, &mut cursor_position_packet);	
     }
 
-    pub fn sdl_keycode_to_mos_keycode(keycode: sdl2::keyboard::Keycode, keymod: sdl2::keyboard::Mod) -> u8{
-        match keycode {
-            Keycode::Left => 0x08,
-            Keycode::Tab => 0x09,
-            Keycode::Right => 0x15,
-            Keycode::Down => 0x0A,
-            Keycode::Backspace => 0x7F,
-            _ => {
-                let mut ascii = keycode as u8;
-                if keymod.contains(Mod::LSHIFTMOD) || keymod.contains(Mod::RSHIFTMOD) || keymod.contains(Mod::CAPSMOD)
-                {
-                    if ascii < 65 {
-                        ascii -= 16;
-                    }
-                    else {
-                        ascii -= 32;
-                    }
-                }
-                ascii
-            },
+    pub fn sdl_scancode_to_mos_keycode(scancode: sdl2::keyboard::Scancode, keymod: sdl2::keyboard::Mod) -> u8{
+        match scancode {
+            Scancode::Left => 0x08,
+            Scancode::Tab => 0x09,
+            Scancode::Right => 0x15,
+            Scancode::Down => 0x0A,
+            Scancode::Backspace => 0x7F,
+            Scancode::Return => 0x0D,
+            Scancode::Escape => 0x1B,
+            _ => 0x00,
         }
     }
 
