@@ -144,20 +144,19 @@ impl VDP {
                     Event::Quit { .. } => break 'running,
                     Event::TextInput { timestamp, window_id, text } => {
                         println!("timestamp {} window_id {}, text {}", timestamp, window_id, text);
-                        ascii = *text.as_bytes().first().unwrap();
+                        let ascii = *text.as_bytes().first().unwrap();
+                        self.send_key(ascii, true);
+                        self.send_key(ascii, false);
                     },
                     Event::KeyUp {keycode, keymod, scancode, ..}  | Event::KeyDown {keycode, keymod, scancode, ..} => {
                         match scancode {
                             Some(scancode) => {
                                 match scancode {
                                     _ => {
-                                        if ascii == 0 {
-                                            ascii = Self::sdl_scancode_to_mos_keycode(scancode, keymod);
-                                        }
+                                        let ascii = Self::sdl_scancode_to_mos_keycode(scancode, keymod);
                                         let up = matches!(event, Event::KeyUp{..});
                                         println!("Pressed key:{} with mod:{} ascii:{} scancode:{} up:{}", keycode.unwrap(), keymod, ascii, scancode, up);
                                         self.send_key(ascii, up);
-                                        ascii = 0;
                                     },
                                 }
                             },
