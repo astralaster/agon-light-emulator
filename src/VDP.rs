@@ -136,9 +136,11 @@ impl VDP {
         self.bootscreen();
     
         let mut event_pump = self.sdl_context.event_pump()?;
-        let mut ascii = 0u8;
     
         'running: loop {
+            self.canvas.set_draw_color(self.background_color);
+            self.canvas.clear();
+
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. } => break 'running,
@@ -169,17 +171,17 @@ impl VDP {
     
             
             self.do_comms();
+            self.render_text();
             self.blink_cusor();
-            // a fake vsync every 16ms
-            if self.last_vsync.elapsed().as_millis() > (1000 / VIDEO_MODES[self.current_video_mode].refresh_rate as u128) {
-                self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                self.last_vsync = Instant::now();
-                self.canvas.present();
-                self.canvas.set_draw_color(self.background_color);
-                self.canvas.clear();
-                self.render_text();
+            let time_to_sync = (1_000_000_000u32 / VIDEO_MODES[self.current_video_mode].refresh_rate as u32) as i128 - self.last_vsync.elapsed().as_nanos() as i128;
+            if time_to_sync < 0i128 {
+                println!("Cannot keep up! {}ns", time_to_sync);
+            } else {
+                std::thread::sleep(Duration::new(0, time_to_sync as u32));
             }
-            std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 1000));
+            self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.last_vsync = Instant::now();
+            self.canvas.present();
         }
 
         Ok(())
