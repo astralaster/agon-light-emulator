@@ -1,4 +1,5 @@
 
+use core::panic;
 use std::sync::mpsc::{Sender, Receiver};
 use std::time::{Instant, Duration};
 
@@ -6,10 +7,11 @@ use sdl2::Sdl;
 use sdl2::event::Event;
 use sdl2::keyboard::{self, Mod, Scancode};
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
+use sdl2::pixels::{Color, PixelFormatEnum};
 use sdl2::rect::{Point, Rect};
-use sdl2::render::Canvas;
-use sdl2::video::Window;
+use sdl2::render::{Canvas, SurfaceCanvas, Texture, TextureCreator};
+use sdl2::surface::Surface;
+use sdl2::video::{Window, WindowContext};
 mod font;
 use font::font::FONT_BYTES;
 struct Cursor {
@@ -76,10 +78,11 @@ static VIDEO_MODES: [VideoMode; 4] = [VideoMode{colors: 2, screen_width: 1024, s
                                     VideoMode{colors: 64, screen_width: 320, screen_height: 240, refresh_rate: 75},
                                     VideoMode{colors: 16, screen_width: 640, screen_height: 480, refresh_rate: 60}];
 
-pub struct VDP {
+pub struct VDP<'a> {
     cursor: Cursor,
-    sdl_context: Sdl,
     canvas: Canvas<Window>,
+    texture: Texture<'a>,
+    texture_creator: &'a TextureCreator<WindowContext>,
     tx: Sender<u8>,
     rx: Receiver<u8>,
     foreground_color: sdl2::pixels::Color,
@@ -89,33 +92,20 @@ pub struct VDP {
     cursor_last_change: Instant,
     vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
     last_vsync: Instant,
-    current_video_mode: usize,
-    text: Vec<Vec<u8>>,
-    scale: f32,
+    current_video_mode: &'static VideoMode,
 }
 
-impl VDP {
-    pub fn new(tx: Sender<u8>, rx: Receiver<u8>, vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>) -> Result<VDP, String> {
+impl VDP<'_> {
+    pub fn new(canvas: Canvas<Window>, texture_creator: &TextureCreator<WindowContext>, tx: Sender<u8>, rx: Receiver<u8>, vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>) -> Result<VDP, String> {
         let mode =  &VIDEO_MODES[1];
-        let scale = 2.0f32;
 
-        let sdl_context = sdl2::init()?;
-        let video_subsystem = sdl_context.video()?;
-    
-        let mut window = video_subsystem
-            .window("agon-light-emulator", mode.screen_width * scale as u32, mode.screen_height * scale as u32)
-            .position_centered()
-            .opengl()
-            .build()
-            .map_err(|e| e.to_string())?;
-    
-        let mut canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
-        canvas.set_scale(scale, scale);
+        let texture = texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, mode.screen_width, mode.screen_height).unwrap();
      
         Ok(VDP {
             cursor: Cursor::new(mode.screen_width as i32, mode.screen_height as i32, 8, 8),
-            sdl_context: sdl_context,
             canvas: canvas,
+            texture: texture,
+            texture_creator: texture_creator,
             tx: tx,
             rx: rx,
             foreground_color: Color::RGB(255, 255, 255),
@@ -125,72 +115,39 @@ impl VDP {
             cursor_last_change: Instant::now(),
             vsync_counter: vsync_counter,
             last_vsync: Instant::now(),
-            current_video_mode: 1,
-            text: Vec::new(),
-            scale: scale,
+            current_video_mode: mode,
         })
     }
 
-    pub fn start(&mut self) -> Result<(), String> {
+    pub fn start(&mut self) {
         self.change_mode(1);
         self.bootscreen();
-    
-        let mut event_pump = self.sdl_context.event_pump()?;
-    
-        'running: loop {
-            self.canvas.set_draw_color(self.background_color);
-            self.canvas.clear();
+    }
 
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => break 'running,
-                    Event::TextInput { timestamp, window_id, text } => {
-                        println!("timestamp {} window_id {}, text {}", timestamp, window_id, text);
-                        let ascii = *text.as_bytes().first().unwrap();
-                        self.send_key(ascii, true);
-                        self.send_key(ascii, false);
-                    },
-                    Event::KeyUp {keycode, keymod, scancode, ..}  | Event::KeyDown {keycode, keymod, scancode, ..} => {
-                        match scancode {
-                            Some(scancode) => {
-                                match scancode {
-                                    _ => {
-                                        let ascii = Self::sdl_scancode_to_mos_keycode(scancode, keymod);
-                                        let up = matches!(event, Event::KeyUp{..});
-                                        println!("Pressed key:{} with mod:{} ascii:{} scancode:{} up:{}", keycode.unwrap(), keymod, ascii, scancode, up);
-                                        self.send_key(ascii, up);
-                                    },
-                                }
-                            },
-                            None => println!("Key without scancode pressed."),
-                        }
-                    },
-                    _ => (),
-                }
+    pub fn run(&mut self) {
+        self.do_comms();
+        
+        
+        if self.last_vsync.elapsed().as_micros() >  (1_000_000u32 / self.current_video_mode.refresh_rate as u32).into() {
+            self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.last_vsync = Instant::now();
+
+
+            let result = self.canvas.copy(&self.texture, None, None);
+            if result.is_err() {
+                panic!("Fail!");
             }
-    
-            
-            self.do_comms();
-            self.render_text();
             self.blink_cusor();
-            
-            if self.last_vsync.elapsed().as_micros() >  (1_000_000u32 / VIDEO_MODES[self.current_video_mode].refresh_rate as u32).into() {
-                self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                self.last_vsync = Instant::now();
-                self.canvas.present();
-            }
+            self.canvas.present();
         }
-
-        Ok(())
     }
 
     fn change_mode(&mut self, mode: usize) {
-        let video_mode =  &VIDEO_MODES[mode];
-        self.cursor.screen_height = video_mode.screen_height as i32;
-        self.cursor.screen_width = video_mode.screen_width as i32;
-        self.canvas.window_mut().set_size(video_mode.screen_width * self.scale as u32, video_mode.screen_height * self.scale as u32);
-        self.current_video_mode = mode;
-        self.text.resize((video_mode.screen_height / self.cursor.font_height as u32) as usize, vec![0; (video_mode.screen_width / self.cursor.font_width as u32) as usize]);
+        self.cursor.screen_height = self.current_video_mode.screen_height as i32;
+        self.cursor.screen_width = self.current_video_mode.screen_width as i32;
+        self.canvas.window_mut().set_size(self.current_video_mode.screen_width, self.current_video_mode.screen_height);
+        self.texture = self.texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, self.current_video_mode.screen_width, self.current_video_mode.screen_height).unwrap();
+        self.current_video_mode = &VIDEO_MODES[mode];
         self.cls();
     }
 
@@ -212,50 +169,40 @@ impl VDP {
         points
     }
     
-    fn render_text(&mut self)
+    fn render_char(&mut self, ascii: u8)
     {
-        for (y, row) in self.text.iter().enumerate() {
-            for (x, ascii)  in row.iter().enumerate() {
-                if *ascii == 0x0 {
-                    continue;
-                }
-                //println!("Render {:#02X?}", ascii);
-                let start = (8 * *ascii as u32) as usize;
-                let end = start+8 as usize;
-                let mut points = Self::get_points_from_font(FONT_BYTES[start..end].to_vec());
-                self.canvas.set_draw_color(self.foreground_color);
-                let video_mode = &VIDEO_MODES[self.current_video_mode];
-                for point in points.iter_mut() {
-                    point.x += x as i32 * self.cursor.font_width;
-                    point.y += y as i32 * self.cursor.font_height;
-                }
-                self.canvas.draw_points(&points[..]);
-            }
-        }
-    }
-
-    fn set_text(&mut self, ascii: u8) {
-        if ascii >= 32
-        {
+        //println!("Render {:#02X?}", ascii);
+        if ascii >= 32 {
             let shifted_ascii = ascii - 32;
-            let x: usize = (self.cursor.position_x / self.cursor.font_width) as usize;
-            let y: usize = (self.cursor.position_y / self.cursor.font_height) as usize;
-            let stride = VIDEO_MODES[self.current_video_mode].screen_width / self.cursor.font_width as u32;
-            self.text[y][x] = shifted_ascii;
+            let start = (8 * shifted_ascii as u32) as usize;
+            let end = start+8 as usize;
+            let mut points = Self::get_points_from_font(FONT_BYTES[start..end].to_vec());
+            
+            for point in points.iter_mut() {
+                point.x += self.cursor.position_x;
+                point.y += self.cursor.position_y;
+            }
+
+            self.canvas.with_texture_canvas(&mut self.texture, |texture_canvas| {
+                texture_canvas.set_draw_color(self.background_color);
+                texture_canvas.fill_rect(Rect::new(self.cursor.position_x, self.cursor.position_y, 8, 8));
+                texture_canvas.set_draw_color(self.foreground_color);
+                texture_canvas.draw_points(&points[..]);
+            });
         }
     }
 
-    pub fn bootscreen(&mut self) {
+    fn bootscreen(&mut self) {
         let boot_message = "Agon Quark VDP Version 1.03";
         for byte in boot_message.as_bytes() {
-            self.set_text(*byte);
+            self.render_char(*byte);
             self.cursor.right();
         }
         self.cursor.down();
         self.cursor.home();
     }
 
-    pub fn blink_cusor(&mut self) {
+    fn blink_cusor(&mut self) {
         if self.cursor_last_change.elapsed().as_millis() > 500 {
             self.cursor_active = !self.cursor_active;
             self.cursor_last_change = Instant::now();
@@ -265,26 +212,28 @@ impl VDP {
         } else {
             self.canvas.set_draw_color(self.background_color);
         }
-        self.canvas.fill_rect(Rect::new(self.cursor.position_x as i32, self.cursor.position_y as i32, 8, 8));
+
+        let output_size = self.canvas.output_size().unwrap();
+        let scale_x = output_size.0 as f32 / self.current_video_mode.screen_width as f32;
+        let scale_y = output_size.1 as f32 / self.current_video_mode.screen_height as f32;
+
+        self.canvas.fill_rect(Rect::new((self.cursor.position_x as f32 * scale_x) as i32, (self.cursor.position_y as f32 * scale_y) as i32, 8u32 * scale_x as u32, 8u32 * scale_y as u32));
     }
 
 
-    pub fn backspace(&mut self) {
+    fn backspace(&mut self) {
         self.cursor.left();
-        self.set_text(b' ');
+        self.render_char(b' ');
     }
 
     
     pub fn cls(&mut self) {
-        self.canvas.set_draw_color(self.background_color);
-        self.canvas.clear();
+        self.canvas.with_texture_canvas(&mut self.texture, |texture_canvas| {
+            texture_canvas.set_draw_color(self.background_color);
+            texture_canvas.clear();
+        });
         self.cursor.position_x = 0;
         self.cursor.position_y = 0;
-        for row in &mut self.text {
-            for char in row {
-                *char = 0;
-            }
-        }
     }
 
     pub fn send_key(&self, keycode: u8, up: bool){
@@ -310,22 +259,6 @@ impl VDP {
             _ => 0x00,
         }
     }
-
-    fn check_scroll(&mut self) {
-        if self.cursor.position_y >= self.cursor.screen_height {
-            self.cursor.up();            
-            println!("Scrolling, cursor y={}\n",self.cursor.position_y);
-            for y in 0..(self.cursor.screen_height / self.cursor.font_height) as usize {
-                for x in 0..(self.cursor.screen_width/ self.cursor.font_width) as usize {
-                    let mut new_char = 0u8;
-                    if (y+1) as i32 *self.cursor.font_height < self.cursor.screen_height {
-                        new_char = self.text[y+1][x];
-                    }
-                    self.text[y][x] = new_char;
-                }
-            }
-        }        
-    }
     
     fn send_packet(&self, code: u8, len: u8, data: &mut Vec<u8>) {
         let mut output: Vec<u8> = Vec::new();
@@ -339,20 +272,35 @@ impl VDP {
     }
     
 
-    pub fn do_comms(&mut self) {
+    fn do_comms(&mut self) {
         match self.rx.try_recv() {
             Ok(n) => {
                 match n {
                     n if n >= 0x20 && n != 0x7F => {
                         println!("Received character: {}", n as char);
-                        self.set_text(n);
+                        self.render_char(n);
                         self.cursor.right();
-                        self.check_scroll();
                     },
                     0x08 => {println!("Cursor left."); self.cursor.left();},
                     0x09 => {println!("Cursor right."); self.cursor.right();},
-                    0x0A => {println!("Cursor down."); self.cursor.down();
-                             self.check_scroll()},
+                    0x0A => {
+                        println!("Cursor down.");
+                        self.cursor.down();
+                        let overdraw = self.cursor.position_y - self.current_video_mode.screen_height as i32 + self.cursor.font_height;
+                        if overdraw > 0 {
+                            println!("Need to scroll! Overdraw: {}", overdraw);
+                            let mut scrolled_texture = self.texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, self.current_video_mode.screen_width, self.current_video_mode.screen_height).unwrap();
+                            self.canvas.with_texture_canvas(&mut scrolled_texture, |texture_canvas| {
+                                texture_canvas.set_draw_color(self.background_color);
+                                texture_canvas.clear();
+                                let rect_src = Rect::new(0, overdraw, self.current_video_mode.screen_width, self.current_video_mode.screen_height - overdraw as u32);
+                                let rect_dst = Rect::new(0, 0, self.current_video_mode.screen_width, self.current_video_mode.screen_height - overdraw as u32);
+                                texture_canvas.copy(&self.texture, rect_src, rect_dst);
+                            });
+                            self.texture = scrolled_texture;
+                            self.cursor.position_y -= overdraw;
+                        }
+                    },
                     0x0B => {println!("Cursor up."); self.cursor.up();},
                     0x0C => {
                         println!("CLS.");
@@ -424,6 +372,7 @@ impl VDP {
             Err(_e) => ()
         }
     }
+
     fn send_mode_information(&mut self) {
         println!("Screen width {} Screen height {}", self.cursor.screen_width, self.cursor.screen_height);
         let mut packet: Vec<u8> = vec![
@@ -433,7 +382,7 @@ impl VDP {
             self.cursor.screen_height.to_le_bytes()[1],
             (self.cursor.screen_width / self.cursor.font_width) as u8,
             (self.cursor.screen_height / self.cursor.font_height) as u8,
-            VIDEO_MODES[self.current_video_mode].colors
+            self.current_video_mode.colors,
          ];
         self.send_packet(0x06, packet.len() as u8, &mut packet);
     }
