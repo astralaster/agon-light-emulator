@@ -173,15 +173,12 @@ impl VDP {
             self.do_comms();
             self.render_text();
             self.blink_cusor();
-            let time_to_sync = (1_000_000_000u32 / VIDEO_MODES[self.current_video_mode].refresh_rate as u32) as i128 - self.last_vsync.elapsed().as_nanos() as i128;
-            if time_to_sync < 0i128 {
-                println!("Cannot keep up! {}ns", time_to_sync);
-            } else {
-                std::thread::sleep(Duration::new(0, time_to_sync as u32));
+            
+            if self.last_vsync.elapsed().as_micros() >  (1_000_000u32 / VIDEO_MODES[self.current_video_mode].refresh_rate as u32).into() {
+                self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.last_vsync = Instant::now();
+                self.canvas.present();
             }
-            self.vsync_counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            self.last_vsync = Instant::now();
-            self.canvas.present();
         }
 
         Ok(())
