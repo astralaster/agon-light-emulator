@@ -369,6 +369,7 @@ impl VDP {
                         println!("MODE.");
                         let mode = self.rx.recv().unwrap();
                         self.change_mode(mode.into());
+                        self.send_mode_information();
                     },
                     0x17 => {
                         println!("VDU23.");
