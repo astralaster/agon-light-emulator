@@ -143,11 +143,11 @@ impl VDP<'_> {
     }
 
     fn change_mode(&mut self, mode: usize) {
+        self.current_video_mode = &VIDEO_MODES[mode];
         self.cursor.screen_height = self.current_video_mode.screen_height as i32;
         self.cursor.screen_width = self.current_video_mode.screen_width as i32;
         self.canvas.window_mut().set_size(self.current_video_mode.screen_width, self.current_video_mode.screen_height);
         self.texture = self.texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, self.current_video_mode.screen_width, self.current_video_mode.screen_height).unwrap();
-        self.current_video_mode = &VIDEO_MODES[mode];
         self.cls();
     }
 
