@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 serialport = "4.2.0"
 sdl2 = "0.35"
-iz80 = { git = "https://github.com/tomm/ez80.git", rev="65a5bd4cd2610a88e2a596ff829b3119774edc00"}
+iz80 = { git = "https://github.com/tomm/ez80.git", rev="7d1a78b14298dea087cfb4255ce1447587b28e17"}
