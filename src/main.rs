@@ -8,6 +8,8 @@ mod VDP;
 
 use iz80::AgonMachine;
 use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::sys::KeyCode;
 
 pub fn main() -> Result<(), String> {
     let (tx_VDP2EZ80, rx_VDP2EZ80): (Sender<u8>, Receiver<u8>) = mpsc::channel();
@@ -56,8 +58,12 @@ pub fn main() -> Result<(), String> {
                 Event::TextInput { timestamp, window_id, text } => {
                     println!("timestamp {} window_id {}, text {}", timestamp, window_id, text);
                     let ascii = *text.as_bytes().first().unwrap();
-                    vdp.send_key(ascii, true);
-                    vdp.send_key(ascii, false);
+                    if ascii < 128 {
+                        vdp.send_key(ascii, true);
+                        vdp.send_key(ascii, false);
+                    } else {
+                        println!("Ignored key with ascii > 127: {}", ascii);
+                    }
                 },
                 Event::KeyUp {keycode, keymod, scancode, ..}  | Event::KeyDown {keycode, keymod, scancode, ..} => {
                     match scancode {
@@ -65,9 +71,11 @@ pub fn main() -> Result<(), String> {
                             match scancode {
                                 _ => {
                                     let ascii = VDP::VDP::sdl_scancode_to_mos_keycode(scancode, keymod);
-                                    let up = matches!(event, Event::KeyUp{..});
-                                    println!("Pressed key:{} with mod:{} ascii:{} scancode:{} up:{}", keycode.unwrap(), keymod, ascii, scancode, up);
-                                    vdp.send_key(ascii, up);
+                                    if ascii > 0 {
+                                        let down = matches!(event, Event::KeyDown{..});
+                                        println!("Pressed key:{:?} with mod:{} ascii:{} scancode:{} down:{}", Some(keycode), keymod, ascii, scancode, down);
+                                        vdp.send_key(ascii, down);
+                                    }
                                 },
                             }
                         },

@@ -236,8 +236,8 @@ impl VDP<'_> {
         self.cursor.position_y = 0;
     }
 
-    pub fn send_key(&self, keycode: u8, up: bool){
-        let mut keyboard_packet: Vec<u8> = vec![keycode, 0, 0, up as u8];
+    pub fn send_key(&self, keycode: u8, down: bool){
+        let mut keyboard_packet: Vec<u8> = vec![keycode, 0, 0, down as u8];
 		self.send_packet(0x1, keyboard_packet.len() as u8, &mut keyboard_packet);
     }
 
