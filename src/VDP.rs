@@ -280,26 +280,14 @@ impl VDP<'_> {
                         println!("Received character: {}", n as char);
                         self.render_char(n);
                         self.cursor.right();
+                        self.check_scrolling_needed();
                     },
                     0x08 => {println!("Cursor left."); self.cursor.left();},
                     0x09 => {println!("Cursor right."); self.cursor.right();},
                     0x0A => {
                         println!("Cursor down.");
                         self.cursor.down();
-                        let overdraw = self.cursor.position_y - self.current_video_mode.screen_height as i32 + self.cursor.font_height;
-                        if overdraw > 0 {
-                            println!("Need to scroll! Overdraw: {}", overdraw);
-                            let mut scrolled_texture = self.texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, self.current_video_mode.screen_width, self.current_video_mode.screen_height).unwrap();
-                            self.canvas.with_texture_canvas(&mut scrolled_texture, |texture_canvas| {
-                                texture_canvas.set_draw_color(self.background_color);
-                                texture_canvas.clear();
-                                let rect_src = Rect::new(0, overdraw, self.current_video_mode.screen_width, self.current_video_mode.screen_height - overdraw as u32);
-                                let rect_dst = Rect::new(0, 0, self.current_video_mode.screen_width, self.current_video_mode.screen_height - overdraw as u32);
-                                texture_canvas.copy(&self.texture, rect_src, rect_dst);
-                            });
-                            self.texture = scrolled_texture;
-                            self.cursor.position_y -= overdraw;
-                        }
+                        self.check_scrolling_needed();
                     },
                     0x0B => {println!("Cursor up."); self.cursor.up();},
                     0x0C => {
@@ -370,6 +358,23 @@ impl VDP<'_> {
                 }
             },
             Err(_e) => ()
+        }
+    }
+
+    fn check_scrolling_needed(&mut self) {
+        let overdraw = self.cursor.position_y - self.current_video_mode.screen_height as i32 + self.cursor.font_height;
+        if overdraw > 0 {
+            println!("Need to scroll! Overdraw: {}", overdraw);
+            let mut scrolled_texture = self.texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, self.current_video_mode.screen_width, self.current_video_mode.screen_height).unwrap();
+            self.canvas.with_texture_canvas(&mut scrolled_texture, |texture_canvas| {
+                texture_canvas.set_draw_color(self.background_color);
+                texture_canvas.clear();
+                let rect_src = Rect::new(0, overdraw, self.current_video_mode.screen_width, self.current_video_mode.screen_height - overdraw as u32);
+                let rect_dst = Rect::new(0, 0, self.current_video_mode.screen_width, self.current_video_mode.screen_height - overdraw as u32);
+                texture_canvas.copy(&self.texture, rect_src, rect_dst);
+            });
+            self.texture = scrolled_texture;
+            self.cursor.position_y -= overdraw;
         }
     }
 
