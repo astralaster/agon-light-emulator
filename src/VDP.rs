@@ -65,17 +65,41 @@ impl Cursor {
     }
 }
 
+static COLOUR_LOOKUP: [sdl2::pixels::Color; 64] = [
+	Color::RGB(0x00, 0x00, 0x00), Color::RGB(0x00, 0x00, 0x55), Color::RGB(0x00, 0x00, 0xAA), Color::RGB(0x00, 0x00, 0xFF),
+	Color::RGB(0x00, 0x55, 0x00), Color::RGB(0x00, 0x55, 0x55), Color::RGB(0x00, 0x55, 0xAA), Color::RGB(0x00, 0x55, 0xFF),
+	Color::RGB(0x00, 0xAA, 0x00), Color::RGB(0x00, 0xAA, 0x55), Color::RGB(0x00, 0xAA, 0xAA), Color::RGB(0x00, 0xAA, 0xFF),
+	Color::RGB(0x00, 0xFF, 0x00), Color::RGB(0x00, 0xFF, 0x55), Color::RGB(0x00, 0xFF, 0xAA), Color::RGB(0x00, 0xFF, 0xFF),
+	Color::RGB(0x55, 0x00, 0x00), Color::RGB(0x55, 0x00, 0x55), Color::RGB(0x55, 0x00, 0xAA), Color::RGB(0x55, 0x00, 0xFF),
+	Color::RGB(0x55, 0x55, 0x00), Color::RGB(0x55, 0x55, 0x55), Color::RGB(0x55, 0x55, 0xAA), Color::RGB(0x55, 0x55, 0xFF),
+	Color::RGB(0x55, 0xAA, 0x00), Color::RGB(0x55, 0xAA, 0x55), Color::RGB(0x55, 0xAA, 0xAA), Color::RGB(0x55, 0xAA, 0xFF),
+	Color::RGB(0x55, 0xFF, 0x00), Color::RGB(0x55, 0xFF, 0x55), Color::RGB(0x55, 0xFF, 0xAA), Color::RGB(0x55, 0xFF, 0xFF),
+	Color::RGB(0xAA, 0x00, 0x00), Color::RGB(0xAA, 0x00, 0x55), Color::RGB(0xAA, 0x00, 0xAA), Color::RGB(0xAA, 0x00, 0xFF),
+	Color::RGB(0xAA, 0x55, 0x00), Color::RGB(0xAA, 0x55, 0x55), Color::RGB(0xAA, 0x55, 0xAA), Color::RGB(0xAA, 0x55, 0xFF),
+	Color::RGB(0xAA, 0xAA, 0x00), Color::RGB(0xAA, 0xAA, 0x55), Color::RGB(0xAA, 0xAA, 0xAA), Color::RGB(0xAA, 0xAA, 0xFF),
+	Color::RGB(0xAA, 0xFF, 0x00), Color::RGB(0xAA, 0xFF, 0x55), Color::RGB(0xAA, 0xFF, 0xAA), Color::RGB(0xAA, 0xFF, 0xFF),
+	Color::RGB(0xFF, 0x00, 0x00), Color::RGB(0xFF, 0x00, 0x55), Color::RGB(0xFF, 0x00, 0xAA), Color::RGB(0xFF, 0x00, 0xFF),
+	Color::RGB(0xFF, 0x55, 0x00), Color::RGB(0xFF, 0x55, 0x55), Color::RGB(0xFF, 0x55, 0xAA), Color::RGB(0xFF, 0x55, 0xFF),
+	Color::RGB(0xFF, 0xAA, 0x00), Color::RGB(0xFF, 0xAA, 0x55), Color::RGB(0xFF, 0xAA, 0xAA), Color::RGB(0xFF, 0xAA, 0xFF),
+	Color::RGB(0xFF, 0xFF, 0x00), Color::RGB(0xFF, 0xFF, 0x55), Color::RGB(0xFF, 0xFF, 0xAA), Color::RGB(0xFF, 0xFF, 0xFF),
+];
+
 struct VideoMode{
     colors: u8,
     screen_width: u32,
     screen_height: u32,
     refresh_rate: u8,
+    palette: &'static[&'static Color],
 }
 
-static VIDEO_MODES: [VideoMode; 4] = [VideoMode{colors: 2, screen_width: 1024, screen_height: 768, refresh_rate: 60},
-                                    VideoMode{colors: 16, screen_width: 512, screen_height: 384, refresh_rate: 60},
-                                    VideoMode{colors: 64, screen_width: 320, screen_height: 240, refresh_rate: 75},
-                                    VideoMode{colors: 16, screen_width: 640, screen_height: 480, refresh_rate: 60}];
+static PALETTE_2: [&'static Color; 2] = [&COLOUR_LOOKUP[0x00], &COLOUR_LOOKUP[0x3F]];
+static PALETTE_16: [&'static Color; 16] = [&COLOUR_LOOKUP[0x00], &COLOUR_LOOKUP[0x20], &COLOUR_LOOKUP[0x08], &COLOUR_LOOKUP[0x28], &COLOUR_LOOKUP[0x02], &COLOUR_LOOKUP[0x22], &COLOUR_LOOKUP[0x0A], &COLOUR_LOOKUP[0x2A], &COLOUR_LOOKUP[0x15], &COLOUR_LOOKUP[0x30], &COLOUR_LOOKUP[0x0C], &COLOUR_LOOKUP[0x3C], &COLOUR_LOOKUP[0x03], &COLOUR_LOOKUP[0x33], &COLOUR_LOOKUP[0x0F], &COLOUR_LOOKUP[0x3F]];
+static PALETTE_64: [&'static Color; 64] = [&COLOUR_LOOKUP[0x00], &COLOUR_LOOKUP[0x20], &COLOUR_LOOKUP[0x08], &COLOUR_LOOKUP[0x28], &COLOUR_LOOKUP[0x02], &COLOUR_LOOKUP[0x22], &COLOUR_LOOKUP[0x0A], &COLOUR_LOOKUP[0x2A], &COLOUR_LOOKUP[0x15], &COLOUR_LOOKUP[0x30], &COLOUR_LOOKUP[0x0C], &COLOUR_LOOKUP[0x3C], &COLOUR_LOOKUP[0x03], &COLOUR_LOOKUP[0x33], &COLOUR_LOOKUP[0x0F], &COLOUR_LOOKUP[0x3F], &COLOUR_LOOKUP[0x01], &COLOUR_LOOKUP[0x04], &COLOUR_LOOKUP[0x05], &COLOUR_LOOKUP[0x06], &COLOUR_LOOKUP[0x07], &COLOUR_LOOKUP[0x09], &COLOUR_LOOKUP[0x0B], &COLOUR_LOOKUP[0x0D], &COLOUR_LOOKUP[0x0E], &COLOUR_LOOKUP[0x10], &COLOUR_LOOKUP[0x11], &COLOUR_LOOKUP[0x12], &COLOUR_LOOKUP[0x13], &COLOUR_LOOKUP[0x14], &COLOUR_LOOKUP[0x16], &COLOUR_LOOKUP[0x17], &COLOUR_LOOKUP[0x18], &COLOUR_LOOKUP[0x19], &COLOUR_LOOKUP[0x1A], &COLOUR_LOOKUP[0x1B], &COLOUR_LOOKUP[0x1C], &COLOUR_LOOKUP[0x1D], &COLOUR_LOOKUP[0x1E], &COLOUR_LOOKUP[0x1F], &COLOUR_LOOKUP[0x21], &COLOUR_LOOKUP[0x23], &COLOUR_LOOKUP[0x24], &COLOUR_LOOKUP[0x25], &COLOUR_LOOKUP[0x26], &COLOUR_LOOKUP[0x27], &COLOUR_LOOKUP[0x29], &COLOUR_LOOKUP[0x2B], &COLOUR_LOOKUP[0x2C], &COLOUR_LOOKUP[0x2D], &COLOUR_LOOKUP[0x2E], &COLOUR_LOOKUP[0x2F], &COLOUR_LOOKUP[0x31], &COLOUR_LOOKUP[0x32], &COLOUR_LOOKUP[0x34], &COLOUR_LOOKUP[0x35], &COLOUR_LOOKUP[0x36], &COLOUR_LOOKUP[0x37], &COLOUR_LOOKUP[0x38], &COLOUR_LOOKUP[0x39], &COLOUR_LOOKUP[0x3A], &COLOUR_LOOKUP[0x3B], &COLOUR_LOOKUP[0x3D], &COLOUR_LOOKUP[0x3E]];
+
+static VIDEO_MODES: [VideoMode; 4] = [VideoMode{colors: 2, screen_width: 1024, screen_height: 768, refresh_rate: 60, palette: &PALETTE_2},
+                                    VideoMode{colors: 16, screen_width: 512, screen_height: 384, refresh_rate: 60, palette: &PALETTE_16},
+                                    VideoMode{colors: 64, screen_width: 320, screen_height: 240, refresh_rate: 75, palette: &PALETTE_64},
+                                    VideoMode{colors: 16, screen_width: 640, screen_height: 480, refresh_rate: 60, palette: &PALETTE_16}];
 
 pub struct VDP<'a> {
     cursor: Cursor,
@@ -517,6 +541,11 @@ impl VDP<'_> {
                         let c = self.rx.recv().unwrap();
                         self.color(c);
                         println!("COLOUR {}",c);
+                        if c < 128 {
+                            self.foreground_color = *self.current_video_mode.palette[c as usize % self.current_video_mode.palette.len()];
+                        } else {
+                            self.background_color = *self.current_video_mode.palette[c as usize % self.current_video_mode.palette.len()];
+                        }
                     },
                     0x12 => {
                         let m = self.rx.recv().unwrap();
