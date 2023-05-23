@@ -554,7 +554,14 @@ impl VDP<'_> {
                         println!("GCOL {},{}",m,c);
                         self.graph_color = *self.current_video_mode.palette[c as usize % self.current_video_mode.palette.len()];
                     },
-                    0x13 => {println!("Define Logical Colour?");},
+                    0x13 => {
+                        let l = self.rx.recv().unwrap();
+                        let p = self.rx.recv().unwrap();
+                        let r = self.rx.recv().unwrap();
+                        let g = self.rx.recv().unwrap();
+                        let b = self.rx.recv().unwrap();
+                        println!("Define Logical Colour?: l:{} p:{} r:{} g:{} b:{}", l, p, r, g, b);
+                    },
                     0x16 => {
                         println!("MODE.");
                         let mode = self.rx.recv().unwrap();
@@ -578,6 +585,18 @@ impl VDP<'_> {
                                         println!("Send Cursor Position");
                                         self.send_cursor_position();
                                     },
+                                    0x85 => {
+                                        let channel = self.rx.recv().unwrap();
+                                        let waveform = self.rx.recv().unwrap();
+                                        let volume = self.rx.recv().unwrap();
+                                        let frequency: u16 = 0;
+                                        frequency.to_be_bytes()[0] = self.rx.recv().unwrap();
+                                        frequency.to_be_bytes()[1] = self.rx.recv().unwrap();
+                                        let duration: u16 = 0;
+                                        duration.to_be_bytes()[0] = self.rx.recv().unwrap();
+                                        duration.to_be_bytes()[1] = self.rx.recv().unwrap();
+                                        println!("VDP_AUDIO?: channel:{} waveform:{} volume:{} frequency:{} duration:{}", channel, waveform, volume, frequency, duration);
+                                    }
                                     0x86 => {
                                         println!("Mode Information");
                                         self.send_mode_information();
