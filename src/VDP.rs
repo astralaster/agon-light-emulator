@@ -552,6 +552,7 @@ impl VDP<'_> {
                         let c = self.rx.recv().unwrap();
                         self.gcolor(m,c);
                         println!("GCOL {},{}",m,c);
+                        self.graph_color = *self.current_video_mode.palette[c as usize % self.current_video_mode.palette.len()];
                     },
                     0x13 => {println!("Define Logical Colour?");},
                     0x16 => {
