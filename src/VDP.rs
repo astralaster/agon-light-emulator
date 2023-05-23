@@ -1,4 +1,3 @@
-
 use core::panic;
 use std::sync::mpsc::{Sender, Receiver};
 use std::time::{Instant, Duration};
@@ -87,12 +86,18 @@ pub struct VDP<'a> {
     rx: Receiver<u8>,
     foreground_color: sdl2::pixels::Color,
     background_color: sdl2::pixels::Color,
-    test_color: sdl2::pixels::Color,
+    graph_color: sdl2::pixels::Color,
     cursor_active: bool,
     cursor_last_change: Instant,
     vsync_counter: std::sync::Arc<std::sync::atomic::AtomicU32>,
     last_vsync: Instant,
     current_video_mode: &'static VideoMode,
+    logical_coords: bool,
+    p1: Point,
+    p2: Point,
+    p3: Point,
+    graph_origin: Point,
+    FONT_DATA: Vec<u8>
 }
 
 impl VDP<'_> {
@@ -110,12 +115,18 @@ impl VDP<'_> {
             rx: rx,
             foreground_color: Color::RGB(255, 255, 255),
             background_color: Color::RGB(0, 0, 0),
-            test_color: Color::RGB(255, 0, 0),
+            graph_color: Color::RGB(255, 255, 255),
             cursor_active: false,
             cursor_last_change: Instant::now(),
             vsync_counter: vsync_counter,
             last_vsync: Instant::now(),
             current_video_mode: mode,
+            FONT_DATA: FONT_BYTES.to_vec(),
+            logical_coords: true,
+            p1: Point::new(0,0),
+            p2: Point::new(0,0),
+            p3: Point::new(0,0),
+            graph_origin: Point::new(0,0),
         })
     }
 
@@ -149,8 +160,26 @@ impl VDP<'_> {
         self.canvas.window_mut().set_size(self.current_video_mode.screen_width, self.current_video_mode.screen_height);
         self.texture = self.texture_creator.create_texture(None, sdl2::render::TextureAccess::Target, self.current_video_mode.screen_width, self.current_video_mode.screen_height).unwrap();
         self.cls();
+        self.p1.x = 0;
+        self.p1.y = 0;
+        self.p2.x = 0;
+        self.p2.y = 0;
+        self.p3.x = 0;
+        self.p3.y = 0;
+        self.graph_origin.x = 0;
+        self.graph_origin.y = 0;
     }
 
+    fn read_word(&mut self) -> i32
+    {
+        let mut w = self.rx.recv().unwrap() as i32;
+        w |= (self.rx.recv().unwrap() as i32) << 8;
+        if w>32767 {
+            w-=65536;
+        }
+        w
+    }
+    
     fn get_points_from_font(bytes : Vec<u8>) -> Vec<Point>
     {
         let mut points: Vec<Point> = Vec::new();
@@ -176,7 +205,7 @@ impl VDP<'_> {
             let shifted_ascii = ascii - 32;
             let start = (8 * shifted_ascii as u32) as usize;
             let end = start+8 as usize;
-            let mut points = Self::get_points_from_font(FONT_BYTES[start..end].to_vec());
+            let mut points = Self::get_points_from_font(self.FONT_DATA[start..end].to_vec());
             
             for point in points.iter_mut() {
                 point.x += self.cursor.position_x;
@@ -235,7 +264,96 @@ impl VDP<'_> {
         self.cursor.position_x = 0;
         self.cursor.position_y = 0;
     }
+    
+    pub fn clg(&mut self) {
+        self.canvas.with_texture_canvas(&mut self.texture, |texture_canvas| {
+            texture_canvas.set_draw_color(self.background_color);
+            texture_canvas.clear();
+        });
+    }
 
+    pub fn color(&mut self, c: u8) {
+        
+    }
+
+    pub fn gcolor(&mut self, m: u8, c: u8) {
+        
+    }    
+
+    pub fn scale(&self, p: Point) -> Point {
+        if self.logical_coords
+        {
+            Point::new(p.x*self.cursor.screen_width/1280, p.y*self.cursor.screen_height/1024)
+        }
+        else
+        {
+            p
+        }
+    }
+
+    pub fn translate(&self, p: Point) -> Point {
+        if self.logical_coords
+        {
+            Point::new(p.x+self.graph_origin.x, self.cursor.screen_height - p.y - self.graph_origin.y)
+        }
+        else
+        {
+            Point::new(p.x+self.graph_origin.x, p.y+self.graph_origin.y)
+        }
+    }
+    
+    pub fn plot(&mut self, mode: u8, x: i32, y: i32) {
+        self.p3 = self.p2;
+        self.p2 = self.p1;
+        self.p1 = self.translate(self.scale(Point::new(x,y)));
+        self.canvas.with_texture_canvas(&mut self.texture, |texture_canvas| {
+            texture_canvas.set_draw_color(self.graph_color);
+            match mode {
+                4 => {println!("MOVETO");},
+                5 => {
+                    println!("LINETO");
+                    texture_canvas.draw_line(self.p1,self.p2);
+                },
+                64..=71 => {
+                    println!("PLOTDOT");
+                    texture_canvas.draw_point(self.p1);
+                },
+                80..=87 => {
+                    println!("TRIANGLE");
+                    // Todo should be a filled triangle. just outline is shown.
+                    texture_canvas.draw_line(self.p1,self.p2);
+                    texture_canvas.draw_line(self.p2,self.p3);
+                    texture_canvas.draw_line(self.p3,self.p1);
+                },
+                144..=151 => {
+                    let mut r: f32 = 0.0;
+                    if (mode < 148) {
+                        r = ((self.p1.x * self.p1.x + self.p1.y * self.p1.y) as f32).sqrt();
+                    } else {
+                        let rx = self.p1.x - self.p2.x;
+                        let ry = self.p1.y - self.p2.y;
+                        r = ((rx*rx + ry*ry) as f32).sqrt();
+                    }
+                    println!("Circle at {},{} radius {}",self.p2.x, self.p2.y,r);
+                    let pstart = Point::new(self.p2.x + (r as i32), self.p2.y);
+                    let mut pold = pstart;
+                    let mut pnew = pold;
+                    // suboptimal implementaion of circle.
+                    for i in 1..32 {
+                        let angle = (i as f32) * 6.28318531 / 32.0;
+                        pold = pnew;
+                        pnew = Point::new(self.p2.x + ((r*angle.cos()) as i32),
+                                          self.p2.y + ((r*angle.sin()) as i32));
+                        texture_canvas.draw_line(pold,pnew);                    
+                    }
+                    texture_canvas.draw_line(pnew,pstart);
+                },
+                _ => {println!("Unsupported plot mode");}
+            }
+        });        
+    }    
+
+    
     pub fn send_key(&self, keycode: u8, down: bool){
         let mut keyboard_packet: Vec<u8> = vec![keycode, 0, 0, down as u8];
 		self.send_packet(0x1, keyboard_packet.len() as u8, &mut keyboard_packet);
@@ -297,9 +415,21 @@ impl VDP<'_> {
                     0x0D => {println!("Cursor home."); self.cursor.home();},
                     0x0E => {println!("PageMode ON?");},
                     0x0F => {println!("PageMode OFF?");},
-                    0x10 => {println!("CLG?");},
-                    0x11 => {println!("COLOUR?");},
-                    0x12 => {println!("GCOL?");},
+                    0x10 => {
+                        println!("CLG");
+                        self.clg();
+                    },
+                    0x11 => {
+                        let c = self.rx.recv().unwrap();
+                        self.color(c);
+                        println!("COLOUR {}",c);
+                    },
+                    0x12 => {
+                        let m = self.rx.recv().unwrap();
+                        let c = self.rx.recv().unwrap();
+                        self.gcolor(m,c);
+                        println!("GCOL {},{}",m,c);
+                    },
                     0x13 => {println!("Define Logical Colour?");},
                     0x16 => {
                         println!("MODE.");
@@ -328,27 +458,53 @@ impl VDP<'_> {
                                         println!("Mode Information");
                                         self.send_mode_information();
                                     },
+                                    0xC0 => {
+                                        let b = self.rx.recv().unwrap();
+                                        self.logical_coords = (b!=0);
+                                        println!("Set logical coords {}\n",self.logical_coords);
+                                    }
                                     n => println!("Unknown VSC command: {:#02X?}.", n),
                                 }
                             },
                             0x01 => println!("Cursor Control?"),
                             0x07 => println!("Scroll?"),
                             0x1B => println!("Sprite Control?"),
-                            n => println!("Unknown VDU command: {:#02X?}.", n),
+                            n if n>=32 => {
+                                    for i in 0..8 {
+                                        let b =  self.rx.recv().unwrap();
+                                        self.FONT_DATA[((n-32)as u32*8+i) as usize] = b;
+                                    }
+                                    println!("Redefine char bitmap: {}.", n);
+                                },
+                            n => { println!("Unknown VDU command: {:#02X?}.", n);}
                         }
                     },
-                    0x19 => {println!("PLOT?");},
-                    0x1D => {println!("VDU_29?");},
+                    0x19 => {
+                        let mode = self.rx.recv().unwrap();
+                        let x = self.read_word();
+                        let y = self.read_word();
+                        println!("PLOT {},{},{}",mode,x,y);
+                        self.plot(mode,x,y);
+                    },
+                    0x1D => {
+                        let x = self.read_word();
+                        let y = self.read_word();
+                        if x>= 0 && y>= 0 {
+                            self.graph_origin=self.scale(Point::new(x,y));
+                        }
+                        println!("Graph origin {},{}",x,y);
+                    },
                     0x1E => {println!("Home."); self.cursor.home();},
-                    0x1F => {println!("TAB?");
-                             let x = self.rx.recv().unwrap() as i32 * self.cursor.font_width;
-                             let y = self.rx.recv().unwrap() as i32 * self.cursor.font_height;
-                             if (x < self.cursor.screen_width &&
-                                 y < self.cursor.screen_height)
-                             {
-                                 self.cursor.position_x = x;
-                                 self.cursor.position_y = y;
-                             }
+                    0x1F => {
+                        let x = self.rx.recv().unwrap() as i32 * self.cursor.font_width;
+                        let y = self.rx.recv().unwrap() as i32 * self.cursor.font_height;
+                        println!("TAB({},{})",x,y);
+                        if (x < self.cursor.screen_width &&
+                            y < self.cursor.screen_height)
+                        {
+                            self.cursor.position_x = x;
+                            self.cursor.position_y = y;
+                        }
                     },
                     0x7F => {
                         println!("BACKSPACE.");
