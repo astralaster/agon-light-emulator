@@ -301,6 +301,74 @@ impl VDP<'_> {
             Point::new(p.x+self.graph_origin.x, p.y+self.graph_origin.y)
         }
     }
+
+    // Return the x coorinates for each y coordinate of the line from point
+    // top to the point bot. top.x and bot.x are included unless we have a
+    // horizontal line, in which case we have only bot.x
+    pub fn line_xcoords(top : Point, bot : Point) -> Vec<i32> {
+        let mut xc = Vec::<i32>::new();
+        let dy = (bot.y - top.y).abs();
+        let dx = (top.x - bot.x).abs();
+        if dy == 0 {
+            xc.push(bot.x)
+        } else {
+            let mut y = top.y;
+            if (dx > dy) {
+                let mut t = -dx/2;
+                let mut y = top.y;
+                // 'horizontal line', iterate over x.
+                xc.push(top.x);
+                if top.x < bot.x {
+                    for x in top.x..=bot.x {
+                        t = t+dy;
+                        if (t>0) {
+                            t=t-dx;
+                            if (x!=top.x && x!=bot.x && y!=bot.y && y!=top.y) { 
+                                xc.push(x);
+                            }
+                            y=y+1;
+                        }
+                    }
+                } else {
+                    for x in (bot.x..=top.x).rev() {
+                        t = t+dy;
+                        if (t>0) {
+                            t=t-dx;
+                            if (x!=top.x && x!=bot.x && y!=bot.y && y!=top.y) { 
+                                xc.push(x);
+                            }
+                            y=y+1;
+                        }
+                    }
+                }
+                xc.push(bot.x);
+            } else {
+                // 'vertical line', iterate over y, assume top.y < bot.y
+                let mut t = -dy/2;
+                let mut x = top.x;
+                for y in top.y..=bot.y {
+                    xc.push(x);
+                    t += dx;
+                    if t>0 {
+                        if top.x > bot.x {
+                            x-=1;
+                        } else {
+                            x+=1;
+                        }
+                        t=t-dy;
+                    }
+                }
+            }
+        }
+        println!("returned list size = {} dy={}",xc.len(),bot.y-top.y);
+        if (xc.len() as i32) < bot.y-top.y+1 {
+            xc.push(bot.x);
+            println!("unexpected coordinate list too short adding one");
+        } else if (xc.len() as i32) > bot.y-top.y+1 {
+            println!("unexpected coordinate list too long");
+        }
+        xc
+    }
     
     pub fn plot(&mut self, mode: u8, x: i32, y: i32) {
         self.p3 = self.p2;
@@ -321,9 +389,35 @@ impl VDP<'_> {
                 80..=87 => {
                     println!("TRIANGLE");
                     // Todo should be a filled triangle. just outline is shown.
-                    texture_canvas.draw_line(self.p1,self.p2);
-                    texture_canvas.draw_line(self.p2,self.p3);
-                    texture_canvas.draw_line(self.p3,self.p1);
+                    //texture_canvas.draw_line(self.p1,self.p2);
+                    //texture_canvas.draw_line(self.p2,self.p3);
+                    //texture_canvas.draw_line(self.p3,self.p1);
+                    let mut ptop : Point = self.p1;
+                    let mut pmid : Point = self.p2;
+                    let mut pbot : Point = self.p3;
+                    // Order the points from top to bottom.
+                    if (ptop.y > pmid.y)
+                    {
+                        (ptop,pmid) = (pmid,ptop);
+                    }
+                    if (ptop.y > pbot.y)
+                    {
+                        (ptop,pbot) = (pbot,ptop);
+                    }
+                    if (pmid.y > pbot.y)
+                    {
+                        (pmid,pbot) = (pbot,pmid);
+                    }
+                    println!("Points are {},{}  {},{} {},{}",ptop.x,ptop.y,pmid.x,pmid.y,pbot.x,pbot.y);
+                    let xv1 = Self::line_xcoords(ptop, pbot);
+                    let mut xv2 = Self::line_xcoords(ptop, pmid);
+                    xv2.append((&mut Self::line_xcoords(pmid,pbot)[1..].to_vec()));
+                    let mut y = ptop.y;
+                    for (i,x1) in xv1.iter().enumerate() {
+                        let x2 = xv2[i];
+                        texture_canvas.draw_line(Point::new(*x1,y),Point::new(x2,y));
+                        y += 1;
+                    }
                 },
                 144..=151 => {
                     let mut r: f32 = 0.0;
