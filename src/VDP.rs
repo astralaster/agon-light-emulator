@@ -1,5 +1,5 @@
 use core::panic;
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Sender, Receiver, TryRecvError};
 use std::time::{Instant, Duration};
 
 use sdl2::Sdl;
@@ -193,16 +193,6 @@ impl VDP<'_> {
         self.graph_origin.x = 0;
         self.graph_origin.y = 0;
     }
-
-    fn read_word(&mut self) -> i32
-    {
-        let mut w = self.rx.recv().unwrap() as i32;
-        w |= (self.rx.recv().unwrap() as i32) << 8;
-        if w>32767 {
-            w-=65536;
-        }
-        w
-    }
     
     fn get_points_from_font(bytes : Vec<u8>) -> Vec<Point>
     {
@@ -394,10 +384,10 @@ impl VDP<'_> {
         xc
     }
     
-    pub fn plot(&mut self, mode: u8, x: i32, y: i32) {
+    pub fn plot(&mut self, mode: u8, x: u16, y: u16) {
         self.p3 = self.p2;
         self.p2 = self.p1;
-        self.p1 = self.translate(self.scale(Point::new(x,y)));
+        self.p1 = self.translate(self.scale(Point::new(x as i32,y as i32)));
         self.canvas.with_texture_canvas(&mut self.texture, |texture_canvas| {
             texture_canvas.set_draw_color(self.graph_color);
             match mode {
@@ -506,10 +496,21 @@ impl VDP<'_> {
         }
         println!("Send packet to MOS: {:#02X?}", output);
     }
-    
+
+    fn read_byte(&mut self) -> u8 {
+        self.rx.recv().unwrap()
+    }
+
+    fn try_read_byte(&mut self) -> Result<u8, TryRecvError> {
+        self.rx.try_recv()
+    }
+
+    fn read_word(&mut self) -> u16 {
+        u16::from_le_bytes([self.rx.recv().unwrap(), self.rx.recv().unwrap()])
+    } 
 
     fn do_comms(&mut self) {
-        match self.rx.try_recv() {
+        match self.try_read_byte() {
             Ok(n) => {
                 match n {
                     n if n >= 0x20 && n != 0x7F => {
@@ -538,7 +539,7 @@ impl VDP<'_> {
                         self.clg();
                     },
                     0x11 => {
-                        let c = self.rx.recv().unwrap();
+                        let c = self.read_byte();
                         self.color(c);
                         println!("COLOUR {}",c);
                         if c < 128 {
@@ -548,36 +549,36 @@ impl VDP<'_> {
                         }
                     },
                     0x12 => {
-                        let m = self.rx.recv().unwrap();
-                        let c = self.rx.recv().unwrap();
+                        let m = self.read_byte();
+                        let c = self.read_byte();
                         self.gcolor(m,c);
                         println!("GCOL {},{}",m,c);
                         self.graph_color = *self.current_video_mode.palette[c as usize % self.current_video_mode.palette.len()];
                     },
                     0x13 => {
-                        let l = self.rx.recv().unwrap();
-                        let p = self.rx.recv().unwrap();
-                        let r = self.rx.recv().unwrap();
-                        let g = self.rx.recv().unwrap();
-                        let b = self.rx.recv().unwrap();
+                        let l = self.read_byte();
+                        let p = self.read_byte();
+                        let r = self.read_byte();
+                        let g = self.read_byte();
+                        let b = self.read_byte();
                         println!("Define Logical Colour?: l:{} p:{} r:{} g:{} b:{}", l, p, r, g, b);
                     },
                     0x16 => {
                         println!("MODE.");
-                        let mode = self.rx.recv().unwrap();
+                        let mode = self.read_byte();
                         self.change_mode(mode.into());
                         self.send_mode_information();
                     },
                     0x17 => {
                         println!("VDU23.");
-                        match self.rx.recv().unwrap() {
+                        match self.read_byte() {
                             0x00 => {
                                 println!("Video System Control.");
-                                match self.rx.recv().unwrap() {
+                                match self.read_byte() {
                                     0x80 => {
                                         println!("VDP_GP.");
                                         let mut packet = Vec::new();
-                                        packet.push(self.rx.recv().unwrap());
+                                        packet.push(self.read_byte());
                                         self.send_packet(0x00, packet.len() as u8, &mut packet);
                                     },
                                     0x81 => println!("VDP_KEYCODE"),
@@ -586,15 +587,11 @@ impl VDP<'_> {
                                         self.send_cursor_position();
                                     },
                                     0x85 => {
-                                        let channel = self.rx.recv().unwrap();
-                                        let waveform = self.rx.recv().unwrap();
-                                        let volume = self.rx.recv().unwrap();
-                                        let frequency: u16 = 0;
-                                        frequency.to_be_bytes()[0] = self.rx.recv().unwrap();
-                                        frequency.to_be_bytes()[1] = self.rx.recv().unwrap();
-                                        let duration: u16 = 0;
-                                        duration.to_be_bytes()[0] = self.rx.recv().unwrap();
-                                        duration.to_be_bytes()[1] = self.rx.recv().unwrap();
+                                        let channel = self.read_byte();
+                                        let waveform = self.read_byte();
+                                        let volume = self.read_byte();
+                                        let frequency = self.read_word();
+                                        let duration = self.read_word();
                                         println!("VDP_AUDIO?: channel:{} waveform:{} volume:{} frequency:{} duration:{}", channel, waveform, volume, frequency, duration);
                                     }
                                     0x86 => {
@@ -602,7 +599,7 @@ impl VDP<'_> {
                                         self.send_mode_information();
                                     },
                                     0xC0 => {
-                                        let b = self.rx.recv().unwrap();
+                                        let b = self.read_byte();
                                         self.logical_coords = (b!=0);
                                         println!("Set logical coords {}\n",self.logical_coords);
                                     }
@@ -614,7 +611,7 @@ impl VDP<'_> {
                             0x1B => println!("Sprite Control?"),
                             n if n>=32 => {
                                     for i in 0..8 {
-                                        let b =  self.rx.recv().unwrap();
+                                        let b =  self.read_byte();
                                         self.FONT_DATA[((n-32)as u32*8+i) as usize] = b;
                                     }
                                     println!("Redefine char bitmap: {}.", n);
@@ -623,15 +620,15 @@ impl VDP<'_> {
                         }
                     },
                     0x19 => {
-                        let mode = self.rx.recv().unwrap();
+                        let mode = self.read_byte();
                         let x = self.read_word();
                         let y = self.read_word();
                         println!("PLOT {},{},{}",mode,x,y);
                         self.plot(mode,x,y);
                     },
                     0x1D => {
-                        let x = self.read_word();
-                        let y = self.read_word();
+                        let x = self.read_word() as i32;
+                        let y = self.read_word() as i32;
                         if x>= 0 && y>= 0 {
                             self.graph_origin=self.scale(Point::new(x,y));
                         }
@@ -639,8 +636,8 @@ impl VDP<'_> {
                     },
                     0x1E => {println!("Home."); self.cursor.home();},
                     0x1F => {
-                        let x = self.rx.recv().unwrap() as i32 * self.cursor.font_width;
-                        let y = self.rx.recv().unwrap() as i32 * self.cursor.font_height;
+                        let x = self.read_byte() as i32 * self.cursor.font_width;
+                        let y = self.read_byte() as i32 * self.cursor.font_height;
                         println!("TAB({},{})",x,y);
                         if (x < self.cursor.screen_width &&
                             y < self.cursor.screen_height)
