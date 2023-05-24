@@ -384,7 +384,7 @@ impl VDP<'_> {
         xc
     }
     
-    pub fn plot(&mut self, mode: u8, x: u16, y: u16) {
+    pub fn plot(&mut self, mode: u8, x: i16, y: i16) {
         self.p3 = self.p2;
         self.p2 = self.p1;
         self.p1 = self.translate(self.scale(Point::new(x as i32,y as i32)));
@@ -505,8 +505,8 @@ impl VDP<'_> {
         self.rx.try_recv()
     }
 
-    fn read_word(&mut self) -> u16 {
-        u16::from_le_bytes([self.rx.recv().unwrap(), self.rx.recv().unwrap()])
+    fn read_word(&mut self) -> i16 {
+        i16::from_le_bytes([self.rx.recv().unwrap(), self.rx.recv().unwrap()])
     } 
 
     fn do_comms(&mut self) {
