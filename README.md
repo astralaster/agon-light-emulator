@@ -22,9 +22,10 @@ cargo build
 cargo run
 ```
 
-## Current features
-* runs bbcbasic!
-* load and runs MOS to the welcome message
-* renders text in the original AGON font
+## Missing features
+* Complete keyboard support.
+* Color Redefinition
+* Sprites
+* Audio
 
 
