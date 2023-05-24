@@ -6,7 +6,7 @@ use std::sync::mpsc;
 
 use agon_light_vdp::VDP;
 
-use iz80::AgonMachine;
+use agon_cpu_emulator::AgonMachine;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::sys::KeyCode;
