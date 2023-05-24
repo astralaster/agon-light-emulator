@@ -9,3 +9,4 @@ edition = "2021"
 serialport = "4.2.0"
 sdl2 = "0.35"
 iz80 = { git = "https://github.com/tomm/ez80.git", rev="7d1a78b14298dea087cfb4255ce1447587b28e17"}
+agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="c1fd8b8e2bdcba8868578d8f9b59e60253401c3c"}

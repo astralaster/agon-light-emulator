@@ -4,7 +4,7 @@ use std::thread;
 use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
 
-mod VDP;
+use agon_light_vdp::VDP;
 
 use iz80::AgonMachine;
 use sdl2::event::Event;
