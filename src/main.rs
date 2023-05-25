@@ -57,30 +57,13 @@ pub fn main() -> Result<(), String> {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => break 'running,
-                Event::TextInput { timestamp, window_id, text } => {
-                    println!("timestamp {} window_id {}, text {}", timestamp, window_id, text);
-                    let ascii = *text.as_bytes().first().unwrap();
-                    if ascii < 128 {
-                        vdp.send_key(ascii, true);
-                        vdp.send_key(ascii, false);
-                    } else {
-                        println!("Ignored key with ascii > 127: {}", ascii);
-                    }
-                },
                 Event::KeyUp {keycode, keymod, scancode, ..}  | Event::KeyDown {keycode, keymod, scancode, ..} => {
                     match scancode {
                         Some(scancode) => {
-                            match scancode {
-                                _ => {
-                                    let ascii = VDP::VDP::sdl_scancode_to_mos_keycode(scancode, keymod);
-                                    if ascii > 0 {
-                                        let down = matches!(event, Event::KeyDown{..});
-                                        println!("Pressed key:{:?} with mod:{} ascii:{} scancode:{} down:{}", Some(keycode), keymod, ascii, scancode, down);
-                                        vdp.send_key(ascii, down);
-                                    }
+                                    let down = matches!(event, Event::KeyDown{..});
+                                    println!("Pressed key: scancode:{} with mod:{} down:{}", scancode, keymod, down);
+                                    vdp.send_key(scancode, keymod, down);
                                 },
-                            }
-                        },
                         None => println!("Key without scancode pressed."),
                     }
                 },
