@@ -24,6 +24,7 @@ pub fn main() -> Result<(), String> {
     let _cpu_thread = thread::spawn(move || {
         // Prepare the device
         let mut machine = AgonMachine::new(tx_EZ802VDP, rx_VDP2EZ80, vsync_counter_ez80);
+        //machine.set_sdcard_directory(std::env::current_dir().unwrap().join("sdcard"));
         machine.start();
         println!("Cpu thread finished.");
     });
