@@ -32,7 +32,8 @@ pub fn main() -> Result<(), String> {
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
-
+    let audio_subsystem = sdl_context.audio()?;
+    
     let window = video_subsystem
         .window("agon-light-emulator", 512, 384)
         .position_centered()
@@ -46,7 +47,7 @@ pub fn main() -> Result<(), String> {
 
     let texture_creator = canvas.texture_creator();
 
-    let mut vdp = VDP::VDP::new(canvas, &texture_creator, tx_VDP2EZ80, rx_EZ802VDP, vsync_counter_vdp)?;
+    let mut vdp = VDP::VDP::new(canvas, &texture_creator, tx_VDP2EZ80, rx_EZ802VDP, vsync_counter_vdp, audio_subsystem)?;
     vdp.start();
 
     let mut event_pump = sdl_context.event_pump()?;
