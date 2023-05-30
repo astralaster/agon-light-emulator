@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 sdl2 = "0.35"
 agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="6fa429215a6843bbea14405bb4dabf918496b2b9"}
-agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="f2c9fc5ddcdeb3821cf14c62a1c12256b042c2b1"}
+agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="a631479994d8e3e1a1c26f1cb4f06a2a4bbaffb5"}
