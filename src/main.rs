@@ -8,8 +8,6 @@ use agon_light_vdp::VDP;
 
 use agon_cpu_emulator::AgonMachine;
 use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
-use sdl2::sys::KeyCode;
 
 pub fn main() -> Result<(), String> {
     let (tx_VDP2EZ80, rx_VDP2EZ80): (Sender<u8>, Receiver<u8>) = mpsc::channel();
@@ -35,8 +33,9 @@ pub fn main() -> Result<(), String> {
     let video_subsystem = sdl_context.video()?;
     let audio_subsystem = sdl_context.audio()?;
     
+    let window_title = format!("agon-light-emulator ({})", env!("GIT_HASH"));
     let window = video_subsystem
-        .window("agon-light-emulator", 512, 384)
+        .window(window_title.as_str(), 512, 384)
         .position_centered()
         .resizable()
         .opengl()
