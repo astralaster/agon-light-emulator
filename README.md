@@ -1,5 +1,7 @@
 # agon-light-emulator
 
+[![Rust](https://github.com/astralaster/agon-light-emulator/actions/workflows/rust.yml/badge.svg)](https://github.com/astralaster/agon-light-emulator/actions/workflows/rust.yml)
+
 This *will be* an emulator for the agon light (https://www.thebyteattic.com/p/agon.html) by Bernardo Kastrup.
 
 The ez80 emulation is done by tomm (https://github.com/tomm/agon-cpu-emulator).
