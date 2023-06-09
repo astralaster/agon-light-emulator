@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sdl2 = "0.35"
+sdl2 = { version = "0.35", features = ["bundled"] }
 clap = { version = "4.3.1", features = ["derive"] }
 agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="244177e1c4b4e5db673f9fa16ea79cdd96059542"}
 agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="1454183996a1421ce6c9a1b6df74941d542ca228"}
