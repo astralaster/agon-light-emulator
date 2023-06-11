@@ -1,0 +1,53 @@
+name: release
+
+on:
+  release:
+    types: [created]
+
+jobs:
+  release_linux:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y -qq
+        sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev libsdl2-gfx-dev libsdl2-image-dev libsdl2-ttf-dev
+    - name: Build
+      run: cargo build --release --verbose --target ${{ env.TARGET }}
+    - name: Zip artifact for deployment
+      run: zip -j agon-light-emulator_${{ env.TARGET }}_${{github.ref_name}}.zip target/${{ env.TARGET }}/release/agon-light-emulator README.md LICENSE bbcbasic.bin MOS.bin
+    - name: Upload to GitHub Release
+      uses: xresloader/upload-to-github-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        file: "*.zip"
+        tags: true
+        draft: true
+  release_windows:
+    runs-on: ubuntu-latest
+    env:
+      TARGET: x86_64-pc-windows-gnu
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y -qq
+        sudo apt-get install -y cmake make mingw-w64
+    - name: Build
+      run: |
+        rustup target add ${{ env.TARGET }}
+        cargo build --release --verbose --target ${{ env.TARGET }} --features sdl2/bundled
+    - name: Zip artifact for deployment
+      run: zip -j agon-light-emulator_${{ env.TARGET }}_${{github.ref_name}}.zip target/${{ env.TARGET }}/release/agon-light-emulator.exe target/${{ env.TARGET }}/release/SDL2.dll README.md LICENSE bbcbasic.bin MOS.bin
+    - name: Upload to GitHub Release
+      uses: xresloader/upload-to-github-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        file: "*.zip"
+        tags: true
+        draft: true
