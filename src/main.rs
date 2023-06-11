@@ -6,7 +6,7 @@ use std::sync::mpsc;
 
 use agon_light_vdp::VDP;
 
-use agon_cpu_emulator::AgonMachine;
+use agon_cpu_emulator::{ AgonMachine, AgonMachineConfig };
 use sdl2::event::Event;
 
 use clap::Parser;
@@ -33,9 +33,14 @@ fn main() -> Result<(), String> {
 
     let _cpu_thread = thread::spawn(move || {
         // Prepare the device
-        let mut machine = AgonMachine::new(tx_ez80_to_vdp, rx_vdp_to_ez80, vsync_counter_ez80);
+        let mut machine = AgonMachine::new(AgonMachineConfig {
+            to_vdp: tx_ez80_to_vdp,
+            from_vdp: rx_vdp_to_ez80,
+            vsync_counter: vsync_counter_ez80,
+            clockspeed_hz: 18_432_000
+        });
         //machine.set_sdcard_directory(std::env::current_dir().unwrap().join("sdcard"));
-        machine.start();
+        machine.start(None);
         println!("Cpu thread finished.");
     });
 
