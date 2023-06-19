@@ -1,6 +1,6 @@
 [package]
 name = "agon-light-emulator"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -8,5 +8,5 @@ edition = "2021"
 [dependencies]
 sdl2 = { version = "0.35" }
 clap = { version = "4.3.1", features = ["derive"] }
-agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="f934d5476ed7be94d05cb75bfca1c0dcf5506652"}
-agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="488a2627b6f08575b00982905a0ee26e7f4147a8"}
+agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="8fbbf4bb220a41de416b7f5e55b7fb9a5153ad01"}
+agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="d917eb49583bdcb10b20ebcfdc2d1cef3598799f"}
