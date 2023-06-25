@@ -7,11 +7,13 @@ use std::sync::mpsc;
 use agon_light_vdp::VDP;
 
 use agon_cpu_emulator::{ AgonMachine, AgonMachineConfig };
+use agon_cpu_emulator::debugger::{ DebugCmd, DebugResp, DebuggerConnection };
 use sdl2::event::Event;
-
+use log;
 use clap::Parser;
 use sdl2::pixels::{PixelFormatEnum};
 use sdl2::surface::Surface;
+mod logger;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -19,6 +21,10 @@ struct Args {
     /// Scaling factor of the ouput window
     #[arg(short, long, default_value_t = 2)]
     scale: u8,
+    #[arg(short, long, default_value_t = false)]
+    debugger: bool,
+    #[arg(short, long, default_value_t = false)]
+    verbose: bool,
 }
 
 fn main() -> Result<(), String> {
@@ -26,10 +32,21 @@ fn main() -> Result<(), String> {
 
     let (tx_vdp_to_ez80, rx_vdp_to_ez80): (Sender<u8>, Receiver<u8>) = mpsc::channel();
     let (tx_ez80_to_vdp, rx_ez80_to_vdp): (Sender<u8>, Receiver<u8>) = mpsc::channel();
+
+    let (tx_cmd_debugger, rx_cmd_debugger): (Sender<DebugCmd>, Receiver<DebugCmd>) = mpsc::channel();
+    let (tx_resp_debugger, rx_resp_debugger): (Sender<DebugResp>, Receiver<DebugResp>) = mpsc::channel();
+
     let vsync_counter_vdp = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
     let vsync_counter_ez80 = vsync_counter_vdp.clone();
 
-    
+    let debugger_con = if args.debugger {
+        let _debugger_thread = thread::spawn(move || {
+            agon_light_emulator_debugger::start(tx_cmd_debugger, rx_resp_debugger);
+        });
+        Some(DebuggerConnection { tx: tx_resp_debugger, rx: rx_cmd_debugger })
+    } else {
+        None
+    };
 
     println!("Start");
 
@@ -42,7 +59,7 @@ fn main() -> Result<(), String> {
             clockspeed_hz: 18_432_000
         });
         //machine.set_sdcard_directory(std::env::current_dir().unwrap().join("sdcard"));
-        machine.start(None);
+        machine.start(debugger_con);
         println!("Cpu thread finished.");
     });
 
@@ -67,11 +84,15 @@ fn main() -> Result<(), String> {
         .build()
         .map_err(|e| e.to_string())?;
     window.set_icon(window_icon);
-    
+
     let canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
     //canvas.set_scale(scale, scale);
 
     let texture_creator = canvas.texture_creator();
+
+    if args.verbose {
+        logger::init(logger::Lvl::Info).unwrap();
+    }
 
     let mut vdp = VDP::VDP::new(canvas, &texture_creator, scale_window, tx_vdp_to_ez80, rx_ez80_to_vdp, vsync_counter_vdp, audio_subsystem)?;
     vdp.start();
@@ -86,10 +107,10 @@ fn main() -> Result<(), String> {
                     match scancode {
                         Some(scancode) => {
                                     let down = matches!(event, Event::KeyDown{..});
-                                    println!("Pressed key: scancode:{:?} with mod:{} down:{}", scancode, keymod, down);
+                                    log::info!("Pressed key: scancode:{} with mod:{} down:{}", scancode, keymod, down);
                                     vdp.send_key(scancode, keymod, down);
                                 },
-                        None => println!("Key without scancode pressed."),
+                        None => log::info!("Key without scancode pressed."),
                     }
                 },
                 _ => (),
