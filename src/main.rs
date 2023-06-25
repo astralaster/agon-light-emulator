@@ -29,6 +29,9 @@ struct Args {
     /// Log level (trace, debug, info, warn, error, off)
     #[arg(short, long, default_value_t = String::from("info"))]
     log_level: String,
+    /// Path to the emulated sdcard directory
+    #[arg(long, default_value_t = String::from("sdcard"))]
+    sdcard: String,
 }
 
 fn main() -> Result<(), String> {
@@ -60,7 +63,7 @@ fn main() -> Result<(), String> {
             vsync_counter: vsync_counter_ez80,
             clockspeed_hz: 18_432_000
         });
-        //machine.set_sdcard_directory(std::env::current_dir().unwrap().join("sdcard"));
+        machine.set_sdcard_directory(std::env::current_dir().unwrap().join(args.sdcard));
         machine.start(debugger_con);
         println!("Cpu thread finished.");
     });
