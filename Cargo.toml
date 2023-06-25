@@ -8,5 +8,7 @@ edition = "2021"
 [dependencies]
 sdl2 = { version = "0.35" }
 clap = { version = "4.3.1", features = ["derive"] }
-agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="8fbbf4bb220a41de416b7f5e55b7fb9a5153ad01"}
-agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="d917eb49583bdcb10b20ebcfdc2d1cef3598799f"}
+log = "0.4"
+agon-light-emulator-debugger = { git = "https://github.com/tomm/agon-light-emulator-debugger.git", rev="39572aba654ebb4a005b6479d4bdb21053775e15"}
+agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="b77b5d5dd219305fecba450f780b5fff7f61a338"}
+agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="58a914b3c2e0279bddc0bec4375cb191b519aca0"}
