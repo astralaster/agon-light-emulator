@@ -21,10 +21,14 @@ struct Args {
     /// Scaling factor of the ouput window
     #[arg(short, long, default_value_t = 2)]
     scale: u8,
+    /// Debugger (disables logging)
     #[arg(short, long, default_value_t = false)]
     debugger: bool,
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+    /// Log level (trace, debug, info, warn, error, off)
+    #[arg(short, long, default_value_t = String::from("info"))]
+    log_level: String,
 }
 
 fn main() -> Result<(), String> {
@@ -47,8 +51,6 @@ fn main() -> Result<(), String> {
     } else {
         None
     };
-
-    println!("Start");
 
     let _cpu_thread = thread::spawn(move || {
         // Prepare the device
@@ -86,12 +88,19 @@ fn main() -> Result<(), String> {
     window.set_icon(window_icon);
 
     let canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
-    //canvas.set_scale(scale, scale);
 
     let texture_creator = canvas.texture_creator();
 
-    if args.verbose {
-        logger::init(logger::Lvl::Info).unwrap();
+    if !args.debugger {
+        match args.log_level.as_str() {
+            "info" => logger::init(logger::Lvl::Info).unwrap(),
+            "debug" => logger::init(logger::Lvl::Debug).unwrap(),
+            "warn" => logger::init(logger::Lvl::Warn).unwrap(),
+            "error" => logger::init(logger::Lvl::Error).unwrap(),
+            "off" => logger::init(logger::Lvl::Off).unwrap(),
+            "trace" => logger::init(logger::Lvl::Trace).unwrap(),
+            _ => println!("Unknown loglevel: {}", args.log_level)
+        }
     }
 
     let mut vdp = VDP::VDP::new(canvas, &texture_creator, scale_window, tx_vdp_to_ez80, rx_ez80_to_vdp, vsync_counter_vdp, audio_subsystem)?;
@@ -107,10 +116,10 @@ fn main() -> Result<(), String> {
                     match scancode {
                         Some(scancode) => {
                                     let down = matches!(event, Event::KeyDown{..});
-                                    log::info!("Pressed key: scancode:{} with mod:{} down:{}", scancode, keymod, down);
+                                    log::debug!("Pressed key: scancode:{} with mod:{} down:{}", scancode, keymod, down);
                                     vdp.send_key(scancode, keymod, down);
                                 },
-                        None => log::info!("Key without scancode pressed."),
+                        None => log::warn!("Key without scancode pressed."),
                     }
                 },
                 _ => (),
@@ -119,8 +128,6 @@ fn main() -> Result<(), String> {
 
         vdp.run();
     }
-
-    println!("Quit");
 
     Ok(())
 }
