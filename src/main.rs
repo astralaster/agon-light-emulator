@@ -10,6 +10,8 @@ use agon_cpu_emulator::{ AgonMachine, AgonMachineConfig };
 use sdl2::event::Event;
 
 use clap::Parser;
+use sdl2::pixels::{PixelFormatEnum};
+use sdl2::surface::Surface;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -51,14 +53,21 @@ fn main() -> Result<(), String> {
     let audio_subsystem = sdl_context.audio()?;
     
     let window_title = format!("agon-light-emulator ({})", env!("GIT_HASH"));
-    let window = video_subsystem
-        .window(window_title.as_str(), 512, 384)
+
+    let agon_logo_height = 56;
+    let agon_logo_width = 56;
+    let mut icon_data = include_bytes!("../assets/icon.data").to_vec();
+    let window_icon = Surface::from_data(&mut icon_data, agon_logo_width, agon_logo_height, agon_logo_width*4, PixelFormatEnum::ABGR8888).unwrap();
+
+    let mut window = video_subsystem
+    .window(window_title.as_str(), 512, 384)
         .position_centered()
         .resizable()
         .opengl()
         .build()
         .map_err(|e| e.to_string())?;
-
+    window.set_icon(window_icon);
+    
     let canvas = window.into_canvas().build().map_err(|e| e.to_string())?;
     //canvas.set_scale(scale, scale);
 
@@ -77,7 +86,7 @@ fn main() -> Result<(), String> {
                     match scancode {
                         Some(scancode) => {
                                     let down = matches!(event, Event::KeyDown{..});
-                                    println!("Pressed key: scancode:{} with mod:{} down:{}", scancode, keymod, down);
+                                    println!("Pressed key: scancode:{:?} with mod:{} down:{}", scancode, keymod, down);
                                     vdp.send_key(scancode, keymod, down);
                                 },
                         None => println!("Key without scancode pressed."),
