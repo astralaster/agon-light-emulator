@@ -11,4 +11,4 @@ clap = { version = "4.3.1", features = ["derive"] }
 log = "0.4"
 agon-light-emulator-debugger = { git = "https://github.com/tomm/agon-light-emulator-debugger.git", rev="39572aba654ebb4a005b6479d4bdb21053775e15"}
 agon-cpu-emulator = { git = "https://github.com/tomm/agon-cpu-emulator.git", rev="b77b5d5dd219305fecba450f780b5fff7f61a338"}
-agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="58a914b3c2e0279bddc0bec4375cb191b519aca0"}
+agon-light-vdp = { git = "https://github.com/astralaster/agon-light-vdp.git", rev="78e81bddbcf01df0d1f8fa450ed3261320ca4378"}
