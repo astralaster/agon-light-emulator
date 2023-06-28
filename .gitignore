@@ -2,3 +2,7 @@
 *.bas
 *.bbc
 *.BBC
+*.lock
+*.nix
+*.code-workspace
+/sdcard
