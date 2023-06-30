@@ -29,7 +29,5 @@ cargo run -r
 ```
 
 ## Missing features
-* More keyboard layouts (currently only us)
+* More keyboard layouts (currently only us,de)
 * Color Redefinition (bbcbasic command COLOUR l,p)
-* No speed limitation (runs as fast as possible)
-* Not cycle accurate ez80 emulation
