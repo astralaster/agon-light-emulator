@@ -6,7 +6,7 @@ use std::sync::mpsc;
 
 use agon_light_vdp::VDP;
 
-use agon_cpu_emulator::{ AgonMachine, AgonMachineConfig };
+use agon_cpu_emulator::{ AgonMachine, AgonMachineConfig, RamInit };
 use agon_cpu_emulator::debugger::{ DebugCmd, DebugResp, DebuggerConnection };
 use sdl2::event::Event;
 use log;
@@ -58,6 +58,7 @@ fn main() -> Result<(), String> {
     let _cpu_thread = thread::spawn(move || {
         // Prepare the device
         let mut machine = AgonMachine::new(AgonMachineConfig {
+            ram_init: RamInit::Random,
             to_vdp: tx_ez80_to_vdp,
             from_vdp: rx_vdp_to_ez80,
             vsync_counter: vsync_counter_ez80,
