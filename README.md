@@ -1,3 +1,6 @@
+# Deprecation notice
+This project will no longer be updated. There is a much better emulator available now: https://github.com/tomm/fab-agon-emulator
+
 # agon-light-emulator
 
 [![Rust](https://github.com/astralaster/agon-light-emulator/actions/workflows/rust.yml/badge.svg)](https://github.com/astralaster/agon-light-emulator/actions/workflows/rust.yml)
